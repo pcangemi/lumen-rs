@@ -1,0 +1,28 @@
+name: Rust checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  check:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install X11 development libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libx11-dev libxcursor-dev libxrandr-dev libxi-dev
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+      - run: cargo build --locked --release --bins
+      - name: Render a scene and validate the viewer drawing
+        run: |
+          ./target/release/lumen-rs --backend cpu --scene-file scenes/glass-study.json --width 96 --height 64 --samples 8 --output renders/smoke.png --exr
+          ./target/release/viewer --headless-preview renders/viewer-smoke.png --width 96 --height 64 --samples 8

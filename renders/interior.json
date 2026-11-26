@@ -1,0 +1,19 @@
+{
+  "backend": "cpu",
+  "device": "10 Rayon threads",
+  "width": 900,
+  "height": 600,
+  "requested_spp": 192,
+  "average_spp": 192.0,
+  "max_depth": 12,
+  "seed": 42,
+  "adaptive_threshold": 0.0,
+  "render_seconds": 126.499589209,
+  "camera_samples_per_second": 819607.4046430463,
+  "primitives": 55438,
+  "bvh_nodes": 28623,
+  "bvh_depth": 22,
+  "invalid_samples": 0,
+  "denoiser": "Open Image Denoise 2.x / CPU / high",
+  "denoise_seconds": 0.919923125
+}

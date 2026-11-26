@@ -1,0 +1,15 @@
+{
+  "camera": {"from": [4.0, 3.4, 6.0], "target": [0.0, 0.5, 0.0], "fov": 42.0},
+  "sky": [0.2, 0.3, 0.5], "horizon": [0.4, 0.45, 0.5],
+  "materials": [
+    {"color": [0.7, 0.68, 0.62], "roughness": 0.65},
+    {"transmission": 1.0, "ior": 1.333, "absorption": [0.35, 0.07, 0.025]},
+    {"emission": [25.0, 22.0, 18.0]}
+  ],
+  "objects": [
+    {"type": "quad", "origin": [-50.0, 0.0, -50.0], "u": [0.0, 0.0, 100.0], "v": [100.0, 0.0, 0.0], "material": 0},
+    {"type": "water", "min": [-2.0, 0.02, -1.4], "max": [2.0, 0.8, 1.4], "material": 1,
+     "waves": {"amplitude": 0.025, "wavelength": 0.75, "resolution": 96, "time": 0.0}},
+    {"type": "quad", "origin": [-4.0, 7.0, -2.0], "u": [2.0, 0.0, 0.0], "v": [0.0, 0.0, 2.0], "material": 2}
+  ]
+}
