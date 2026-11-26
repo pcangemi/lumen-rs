@@ -411,7 +411,12 @@ pub(super) fn imported_furniture(scene: &mut Scene, asset_root: &Path) -> Result
     Ok(())
 }
 
-pub(super) fn apartment_decor(scene: &mut Scene, root: &Path, brass: usize) -> Result<()> {
+pub(super) fn apartment_decor(
+    scene: &mut Scene,
+    root: &Path,
+    brass: usize,
+    night: bool,
+) -> Result<()> {
     // A pleated table lamp sits on the sideboard, alongside the ceramic vessel.
     lathe_segments(
         scene,
@@ -427,8 +432,15 @@ pub(super) fn apartment_decor(scene: &mut Scene, root: &Path, brass: usize) -> R
         brass,
         48,
     );
-    let shade = scene.add_material(Material::matte(Vec3::new(0.80, 0.73, 0.60)));
+    let shade = scene.add_material(Material::matte(Vec3::new(0.80, 0.73, 0.60)).translucent(0.62));
     let center = Vec3::new(4.03, 0.694, -0.70);
+    let bulb = scene.add_material(if night {
+        Material::light(Vec3::new(180.0, 110.0, 52.0))
+    } else {
+        Material::matte(Vec3::new(0.95, 0.93, 0.86))
+    });
+    cylinder(scene, center + Vec3::Y * 0.24, 0.015, 0.065, brass);
+    scene.add_sphere(center + Vec3::Y * 0.365, 0.028, bulb);
     for i in 0..128 {
         let point = |i: usize, y: f32| {
             let a = i as f32 * TAU / 128.0;

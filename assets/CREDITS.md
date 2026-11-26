@@ -58,3 +58,10 @@ To restore the two lamp conversions, run Blender with
 `--background --python scripts/prepare-lighting-assets.py`. Set `KTX_TOOL` to the
 Khronos KTX-Software `ktx` executable to decode the arc lamp's source textures.
 The renderer uses the bundled conversions and needs neither Blender nor KTX at runtime.
+
+The white painted timber windows are original procedural geometry, using the
+traditional rounded meeting stiles, crémone hardware and glazing-bead construction
+illustrated by [Atulam's heritage windows](https://www.atulam.fr/fenetres/tradilou-haussmannienne/)
+as a construction reference. No manufacturer mesh or image is redistributed.
+The cabinet lamp is original geometry with a separate bulb and a diffuse-transmitting
+shade. Both floor-level lamp leads connect to modeled wall outlets.

@@ -69,7 +69,24 @@ pub fn trace(scene: &Scene, mut ray: Ray, rng: &mut Rng, max_depth: u32) -> Vec3
             break;
         }
         let wo = -ray.direction;
-        if material.is_glass() {
+        if material.is_thin_glass() {
+            let cosine = hit.geometric.dot(wo).clamp(0.0, 1.0);
+            let transmission =
+                crate::material::thin_glass_transmittance(cosine, material.surface[3]);
+            let direction = if rng.uniform() < 1.0 - transmission {
+                previous_was_specular = true;
+                ray.direction + 2.0 * cosine * hit.geometric
+            } else {
+                // Straight transmission is also available to next-event estimation.
+                // Preserve its previous vertex and include the branch probability in MIS.
+                previous_pdf *= transmission;
+                ray.direction
+            };
+            ray = Ray {
+                origin: offset(hit.p, hit.geometric, direction),
+                direction,
+            };
+        } else if material.is_glass() {
             let eta_i = if medium_count > 0 {
                 scene.materials[media[medium_count - 1]].surface[3]
             } else {
@@ -123,8 +140,8 @@ pub fn trace(scene: &Scene, mut ray: Ray, rng: &mut Rng, max_depth: u32) -> Vec3
                 let dist = dist2.sqrt();
                 let wi = to_light / dist;
                 let cos_l = ln.dot(-wi).abs();
-                let cos = n.dot(wi).max(0.0);
-                if cos > 0.0 && cos_l > 1e-7 && hit.geometric.dot(wi) > 0.0 {
+                let cos = n.dot(wi).abs();
+                if cos > 0.0 && cos_l > 1e-7 && material.allows_direction(n, hit.geometric, wi) {
                     let pdf = scene.light_probability(li) * dist2 / (cos_l * light.area);
                     let (f, bsdf_pdf) = material.eval(color, n, wo, wi);
                     let origin = offset(hit.p, hit.geometric, wi);
@@ -134,7 +151,8 @@ pub fn trace(scene: &Scene, mut ray: Ray, rng: &mut Rng, max_depth: u32) -> Vec3
                         origin,
                         direction: shadow.normalize(),
                     };
-                    if scene.intersect(ray, shadow.length() - 1e-5, true).is_none() {
+                    let visibility = scene.shadow_transmittance(ray, shadow.length() - 1e-5);
+                    if visibility > 0.0 {
                         let emission = unpack_vec3(
                             scene.materials
                                 [scene.primitives[light.primitive as usize].info[1] as usize]
@@ -145,21 +163,22 @@ pub fn trace(scene: &Scene, mut ray: Ray, rng: &mut Rng, max_depth: u32) -> Vec3
                         });
                         radiance += throughput
                             * transmittance
+                            * visibility
                             * f
                             * emission
-                            * (cos * power(pdf, bsdf_pdf) / pdf.max(1e-20));
+                            * (cos * power(pdf, bsdf_pdf * visibility) / pdf.max(1e-20));
                     }
                 }
             }
             let wi = material.sample(n, wo, rng);
-            if wi.dot(hit.geometric) <= 0.0 {
+            if !material.allows_direction(n, hit.geometric, wi) {
                 break;
             }
             let (f, pdf) = material.eval(color, n, wo, wi);
             if pdf <= 1e-12 {
                 break;
             }
-            throughput *= f * (n.dot(wi).max(0.0) / pdf);
+            throughput *= f * (n.dot(wi).abs() / pdf);
             previous_pdf = pdf;
             previous_position = hit.p;
             previous_was_specular = false;
@@ -216,10 +235,12 @@ fn sample_volume_light(
         origin: position,
         direction: shadow.normalize(),
     };
-    if scene.intersect(ray, shadow.length() - 1e-5, true).is_some() {
+    let visibility = scene.shadow_transmittance(ray, shadow.length() - 1e-5);
+    if visibility <= 0.0 {
         return Vec3::ZERO;
     }
     let transmittance = medium.transmittance(ray, shadow.length(), rng);
     let emission = unpack_vec3(scene.materials[primitive.info[1] as usize].emission);
-    emission * (transmittance * phase * power(pdf, phase) / pdf.max(1e-20))
+    emission
+        * (transmittance * visibility * phase * power(pdf, phase * visibility) / pdf.max(1e-20))
 }

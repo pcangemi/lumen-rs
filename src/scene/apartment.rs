@@ -1,6 +1,7 @@
 //! Detailed apartment interior with cut parquet boards, joinery, mouldings and soft furnishings.
 mod atmosphere;
 mod details;
+mod joinery;
 use super::*;
 use crate::geometry::{pack_vec3, unpack_vec3};
 use crate::rng::Rng;
@@ -50,6 +51,12 @@ pub fn build(aspect: f32, lighting: Lighting) -> Result<Scene> {
     let trim = scene.add_material(Material {
         surface: [0.36, 0.0, 0.0, 1.5],
         ..Material::matte(Vec3::new(0.83, 0.82, 0.76))
+    });
+    let window_paint = scene.add_material(Material {
+        surface: [0.43, 0.0, 0.0, 1.5],
+        ..Material::matte(Vec3::new(0.84, 0.83, 0.78))
+            .textured(plaster_texture, -24.0)
+            .texture_strength(0.06)
     });
     let radiator_paint = scene.add_material(Material {
         surface: [0.52, 0.0, 0.0, 1.5],
@@ -106,7 +113,7 @@ pub fn build(aspect: f32, lighting: Lighting) -> Result<Scene> {
             Vec3::new(-4.4, 3.22, start),
             plaster,
         );
-        window(&mut scene, start, end, trim, brass, dark, glass);
+        window(&mut scene, start, end, window_paint, brass, dark, glass);
         details::window_surround(&mut scene, start, end, trim, brass);
         details::radiator(&mut scene, (start + end) * 0.5, radiator_paint, brass, dark);
         // The bunched cloth lies entirely outside the swept casement opening.
@@ -125,7 +132,7 @@ pub fn build(aspect: f32, lighting: Lighting) -> Result<Scene> {
     details::wool_rug(&mut scene, &asset_root)?;
     details::imported_furniture(&mut scene, &asset_root)?;
 
-    details::apartment_decor(&mut scene, &asset_root, brass)?;
+    details::apartment_decor(&mut scene, &asset_root, brass, night)?;
 
     // Low circular table, layered books, and original ceramic vessel.
     let paper = scene.add_material(Material::matte(Vec3::new(0.76, 0.73, 0.64)));
@@ -262,7 +269,7 @@ fn mouldings(scene: &mut Scene, material: usize) {
             );
         }
     }
-    for (left, right) in [(-4.05, -1.65), (-1.3, 1.1), (1.45, 4.12)] {
+    for (left, right) in [(-4.05, -1.65), (-1.3, 4.12)] {
         panel(scene, left, right, 0.32, 0.94, material);
     }
     panel(scene, -4.05, -1.65, 1.4, 3.29, material);
@@ -270,34 +277,18 @@ fn mouldings(scene: &mut Scene, material: usize) {
 }
 fn panel(scene: &mut Scene, left: f32, right: f32, bottom: f32, top: f32, material: usize) {
     for (inset, width, depth) in [(0.0, 0.035, 0.026), (0.044, 0.014, 0.018)] {
-        let (l, r, b, t) = (left + inset, right - inset, bottom + inset, top - inset);
-        for (min, max) in [
-            (
-                Vec3::new(l, b, -4.49),
-                Vec3::new(r, b + width, -4.49 + depth),
-            ),
-            (
-                Vec3::new(l, t - width, -4.49),
-                Vec3::new(r, t, -4.49 + depth),
-            ),
-            (
-                Vec3::new(l, b, -4.49),
-                Vec3::new(l + width, t, -4.49 + depth),
-            ),
-            (
-                Vec3::new(r - width, b, -4.49),
-                Vec3::new(r, t, -4.49 + depth),
-            ),
-        ] {
-            scene.add_box(min, max, material);
-        }
+        joinery::frame(
+            scene,
+            Vec3::new(left + inset, bottom + inset, -4.499),
+            [Vec3::X, Vec3::Y, Vec3::Z],
+            Vec2::new(right - left - 2.0 * inset, top - bottom - 2.0 * inset),
+            width,
+            depth,
+            material,
+        );
     }
 }
 
-#[allow(
-    clippy::approx_constant,
-    reason = "Window dimensions are measured in meters, not angles"
-)]
 fn window(
     scene: &mut Scene,
     start: f32,
@@ -307,75 +298,7 @@ fn window(
     iron: usize,
     glass: usize,
 ) {
-    let x = -4.38;
-    for (min, max) in [
-        (
-            Vec3::new(x - 0.2, 0.71, start - 0.06),
-            Vec3::new(x + 0.2, 0.79, end + 0.06),
-        ),
-        (
-            Vec3::new(x - 0.18, 3.14, start - 0.07),
-            Vec3::new(x + 0.05, 3.25, end + 0.07),
-        ),
-        (
-            Vec3::new(x - 0.18, 0.79, start - 0.07),
-            Vec3::new(x + 0.05, 3.14, start + 0.04),
-        ),
-        (
-            Vec3::new(x - 0.18, 0.79, end - 0.04),
-            Vec3::new(x + 0.05, 3.14, end + 0.07),
-        ),
-    ] {
-        scene.add_box(min, max, trim);
-    }
-    let middle = (start + end) * 0.5;
-    for (left, right, angle, pivot_z) in [
-        (start + 0.04, middle, 65.0f32, start + 0.04),
-        (middle, end - 0.04, -65.0f32, end - 0.04),
-    ] {
-        let before = scene.primitives.len();
-        for (min, max) in [
-            (Vec3::new(x, 0.81, left), Vec3::new(x + 0.065, 0.88, right)),
-            (Vec3::new(x, 3.05, left), Vec3::new(x + 0.065, 3.13, right)),
-            (
-                Vec3::new(x, 0.88, left),
-                Vec3::new(x + 0.065, 3.05, left + 0.06),
-            ),
-            (
-                Vec3::new(x, 0.88, right - 0.06),
-                Vec3::new(x + 0.065, 3.05, right),
-            ),
-            (
-                Vec3::new(x, 1.67, left + 0.06),
-                Vec3::new(x + 0.065, 1.72, right - 0.06),
-            ),
-        ] {
-            scene.add_box(min, max, trim);
-        }
-        for (bottom, top) in [(0.88, 1.67), (1.72, 3.05)] {
-            scene.add_box(
-                Vec3::new(x + 0.025, bottom, left + 0.06),
-                Vec3::new(x + 0.031, top, right - 0.06),
-                glass,
-            );
-        }
-        scene.add_box(
-            Vec3::new(x + 0.065, 1.38, right - 0.12),
-            Vec3::new(x + 0.09, 1.53, right - 0.09),
-            brass,
-        );
-        let rotation = Mat3::from_rotation_y(angle.to_radians());
-        let pivot = Vec3::new(x, 0.0, pivot_z);
-        for primitive in &mut scene.primitives[before..] {
-            primitive.p0 = pack_vec3(pivot + rotation * (unpack_vec3(primitive.p0) - pivot), 0.0);
-            primitive.p1 = pack_vec3(rotation * unpack_vec3(primitive.p1), 0.0);
-            primitive.p2 = pack_vec3(rotation * unpack_vec3(primitive.p2), 0.0);
-            primitive.n0 = pack_vec3(rotation * unpack_vec3(primitive.n0), 0.0);
-            primitive.n1 = pack_vec3(rotation * unpack_vec3(primitive.n1), 0.0);
-            primitive.n2 = pack_vec3(rotation * unpack_vec3(primitive.n2), 0.0);
-        }
-    }
-    atmosphere::balcony(scene, start, end, iron);
+    joinery::window(scene, start, end, trim, brass, iron, glass);
 }
 
 fn folded_curtain(scene: &mut Scene, start: f32, width: f32, material: usize) {

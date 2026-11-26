@@ -27,6 +27,39 @@ def vector(value):
     return Vector((value[0], -value[2], value[1]))
 
 
+def thin_glass_shader(nodes, links, ior):
+    """Lossless parallel interfaces: straight transmission plus 2F/(1+F) reflection."""
+    geometry = nodes.new('ShaderNodeNewGeometry')
+    sided_ior = nodes.new('ShaderNodeMath')
+    sided_ior.operation = 'MULTIPLY_ADD'
+    links.new(geometry.outputs['Backfacing'], sided_ior.inputs[0])
+    sided_ior.inputs[1].default_value = 1 / ior - ior
+    sided_ior.inputs[2].default_value = ior
+    fresnel = nodes.new('ShaderNodeFresnel')
+    links.new(sided_ior.outputs[0], fresnel.inputs['IOR'])
+    numerator = nodes.new('ShaderNodeMath')
+    numerator.operation = 'MULTIPLY'
+    links.new(fresnel.outputs[0], numerator.inputs[0])
+    numerator.inputs[1].default_value = 2
+    denominator = nodes.new('ShaderNodeMath')
+    denominator.operation = 'ADD'
+    links.new(fresnel.outputs[0], denominator.inputs[0])
+    denominator.inputs[1].default_value = 1
+    reflection = nodes.new('ShaderNodeMath')
+    reflection.operation = 'DIVIDE'
+    links.new(numerator.outputs[0], reflection.inputs[0])
+    links.new(denominator.outputs[0], reflection.inputs[1])
+    transparent = nodes.new('ShaderNodeBsdfTransparent')
+    mirror = nodes.new('ShaderNodeBsdfAnisotropic')
+    mirror.inputs['Color'].default_value = (1, 1, 1, 1)
+    mirror.inputs['Roughness'].default_value = 0
+    mixture = nodes.new('ShaderNodeMixShader')
+    links.new(reflection.outputs[0], mixture.inputs[0])
+    links.new(transparent.outputs[0], mixture.inputs[1])
+    links.new(mirror.outputs[0], mixture.inputs[2])
+    return mixture
+
+
 def material(record, textures, vertex_colors):
     result = bpy.data.materials.new('Surface')
     result.use_nodes = True
@@ -40,7 +73,9 @@ def material(record, textures, vertex_colors):
         shader.inputs['Color'].default_value = (*emission[:3], 1)
         links.new(shader.outputs[0], output.inputs['Surface'])
         return result
-    if surface[2] > 0.5:
+    if surface[2] == 2:
+        shader = thin_glass_shader(nodes, links, surface[3])
+    elif surface[2] > 0.5:
         shader = nodes.new('ShaderNodeBsdfGlass')
         shader.distribution = 'BECKMANN'
         shader.inputs['Color'].default_value = (1, 1, 1, 1)
@@ -131,6 +166,16 @@ def material(record, textures, vertex_colors):
         accepted.inputs[0].default_value = 1
         links.new(threshold.outputs[0], accepted.inputs[1])
         links.new(accepted.outputs[0], shader.inputs['Alpha'])
+    if surface[2] <= 0.5 and absorption[3] > 0:
+        transmitted = nodes.new('ShaderNodeBsdfTranslucent')
+        transmitted.inputs['Color'].default_value = (*base[:3], 1)
+        if vertex_colors:
+            links.new(color_output, transmitted.inputs['Color'])
+        mixture = nodes.new('ShaderNodeMixShader')
+        mixture.inputs[0].default_value = absorption[3]
+        links.new(shader.outputs[0], mixture.inputs[1])
+        links.new(transmitted.outputs[0], mixture.inputs[2])
+        shader = mixture
     links.new(shader.outputs[0], output.inputs['Surface'])
     return result
 

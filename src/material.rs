@@ -12,8 +12,9 @@ use glam::Vec3;
 pub struct Material {
     pub base: [f32; 4],
     pub emission: [f32; 4],
-    // roughness, metallic, transmission, index of refraction
+    // roughness, metallic, surface kind (0 opaque, 1 solid glass, 2 thin glass), IOR
     pub surface: [f32; 4],
+    /// RGB volume absorption; w is diffuse transmission through a thin sheet.
     pub absorption: [f32; 4],
     // Pattern scale, kind (0 solid, 1 stone, 2 wood, 3 checker), texture index + 1, mapping scale.
     pub detail: [f32; 4],
@@ -44,11 +45,30 @@ impl Material {
             ..Self::matte(Vec3::ONE)
         }
     }
+    /// Smooth, locally parallel glass interfaces collapsed into one thin surface.
+    pub fn thin_glass(ior: f32) -> Self {
+        Self {
+            surface: [0.0, 0.0, 2.0, ior],
+            ..Self::matte(Vec3::ONE)
+        }
+    }
+    pub fn is_thin_glass(&self) -> bool {
+        self.surface[2] == 2.0
+    }
     pub fn light(color: Vec3) -> Self {
         Self {
             emission: pack_vec3(color, 0.0),
             ..Self::matte(Vec3::ZERO)
         }
+    }
+    /// Mix opaque reflection with diffuse transmission for a single cloth/paper surface.
+    pub fn translucent(mut self, fraction: f32) -> Self {
+        self.absorption[3] = fraction.clamp(0.0, 1.0);
+        self
+    }
+    pub fn allows_direction(&self, shading: Vec3, geometric: Vec3, wi: Vec3) -> bool {
+        shading.dot(wi) * geometric.dot(wi) > 0.0
+            && (geometric.dot(wi) > 0.0 || self.absorption[3] > 0.0)
     }
     pub fn patterned(mut self, kind: u32, scale: f32) -> Self {
         self.detail = [scale, kind as f32, 0.0, 0.0];
@@ -103,9 +123,13 @@ impl Material {
     /// Evaluate BRDF and solid-angle PDF. wi/wo both point away from the surface.
     pub fn eval(&self, color: Vec3, n: Vec3, wo: Vec3, wi: Vec3) -> (Vec3, f32) {
         let nv = n.dot(wo).max(0.0);
-        let nl = n.dot(wi).max(0.0);
-        if nv <= 0.0 || nl <= 0.0 {
+        let nl = n.dot(wi);
+        let transmission = self.absorption[3];
+        if nv <= 0.0 || nl == 0.0 {
             return (Vec3::ZERO, 0.0);
+        }
+        if nl < 0.0 {
+            return (color * (transmission * INV_PI), -nl * transmission * INV_PI);
         }
         let h = (wi + wo).normalize_or_zero();
         let nh = n.dot(h).max(0.0);
@@ -121,9 +145,12 @@ impl Material {
             + f * (d * g1 * g2 / (4.0 * nv * nl).max(1e-12));
         let spec_p = 0.25 + 0.5 * self.surface[1];
         let pdf = spec_p * d * g1 / (4.0 * nv).max(1e-12) + (1.0 - spec_p) * nl * INV_PI;
-        (brdf, pdf)
+        (brdf * (1.0 - transmission), pdf * (1.0 - transmission))
     }
     pub fn sample(&self, n: Vec3, wo: Vec3, rng: &mut Rng) -> Vec3 {
+        if self.absorption[3] > 0.0 && rng.uniform() < self.absorption[3] {
+            return -rng.cosine(n);
+        }
         if rng.uniform() >= 0.25 + 0.5 * self.surface[1] {
             return rng.cosine(n);
         }
@@ -162,4 +189,10 @@ pub fn fresnel(cos: f32, eta_i: f32, eta_t: f32) -> f32 {
     let rs = (eta_i * cos - eta_t * ct) / (eta_i * cos + eta_t * ct);
     let rp = (eta_t * cos - eta_i * ct) / (eta_t * cos + eta_i * ct);
     0.5 * (rs * rs + rp * rp)
+}
+
+/// Sum internal reflections between the two interfaces of a lossless thin sheet.
+pub fn thin_glass_transmittance(cos: f32, ior: f32) -> f32 {
+    let reflection = fresnel(cos.abs().clamp(0.0, 1.0), 1.0, ior);
+    (1.0 - reflection) / (1.0 + reflection)
 }

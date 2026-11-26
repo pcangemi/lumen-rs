@@ -31,6 +31,7 @@ Lumen's `render_seconds` measures transport after scene and pipeline constructio
 - UV textures are exported as linear EXR and sampled in both engines. World-projected textures and procedural colors are baked at triangle vertices in this comparison export; interpolation can visibly change large faces.
 - Camera orientation, vertical field of view, focus distance and aperture are mapped. Environment radiance is exported as a linear equirectangular map.
 - Smooth glass and RGB absorption are mapped to Cycles glass and absorption nodes. Surface smoothing and volume bookkeeping can differ.
+- Thin glass uses a Fresnel-weighted transparent/mirror mixture in Cycles, including the second interface. Diffuse-transmitting shades use a reflection/translucent mixture. These node graphs were constructed successfully in Blender 5.3; a new full comparison of the revised apartment remains outstanding.
 - All triangle materials are separated into objects so a glass volume cannot make opaque geometry part of its absorption object.
 - Participating media are currently rejected by the exporter. Do not claim cloud parity from a surface-only benchmark.
 - Adaptive sampling, sample clamping and denoising are disabled for the raw comparison. Different termination rules and bounce semantics can still affect reference images.

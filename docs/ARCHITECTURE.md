@@ -52,7 +52,11 @@ The native window owns a separate linear image. A worker sends completed tile co
 
 Distances are in meters. Rendering uses single-precision, linear RGB rather than a spectral representation. BRDF directions point away from the surface; ray directions are normalized. Geometric normals determine medium transitions and ray offsets; smooth normals determine opaque shading.
 
-Light sampling uses area-weighted emitted luminance and the power heuristic. Smooth specular paths use delta events and cannot be sampled by direct-light connections through glass. Caustics may appear through path sampling, but can be very noisy. The bounce cap truncates transport. Adaptive stopping is optional and introduces additional estimator bias.
+Light sampling uses area-weighted emitted luminance and the power heuristic. Smooth specular paths use delta events and cannot be sampled by direct-light connections through solid refractive glass. Caustics may appear through path sampling, but can be very noisy. The bounce cap truncates transport. Adaptive stopping is optional and introduces additional estimator bias.
+
+Thin glass is a separate model for locally parallel interfaces in air. It sums internal Fresnel reflections and transmits in the incident direction, approximating a thin envelope without tracing its wall thickness. Shadow traversal accumulates these transmission factors while retaining early-out occlusion for opaque objects. Straight transmission preserves the preceding sampling vertex and updates its probability for MIS; reflected paths remain specular. This exception does not make direct-light connections through solid refractive glass valid. Thin fabric/paper instead mixes the opaque BRDF with a cosine-weighted diffuse transmission lobe; neither kind requires a new GPU record layout.
+
+The envelope model follows the [thin dielectric formulation in PBRT](https://pbr-book.org/4ed/Reflection_Models/Dielectric_BSDF#ThinDielectricBSDF). Regression tests compare accumulated shadow losses with the analytic result and next-event estimation with pure path sampling.
 
 One optional bounded medium occupies air outside closed dielectrics. Homogeneous extinction has analytic shadow transmittance; procedural clouds use delta tracking for collisions and ratio tracking for shadows. The global majorant is conservative because density remains in [0, 1]. The implementation does not support overlapping participating media or spatial majorant grids.
 

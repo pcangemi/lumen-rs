@@ -90,9 +90,11 @@ impl Scene {
                     && unpack_vec3(material.base).max_element() <= 1.0
                     && (0.0..=1.0).contains(&material.surface[0])
                     && (0.0..=1.0).contains(&material.surface[1])
-                    && (material.surface[2] == 0.0 || material.surface[2] == 1.0)
+                    && matches!(material.surface[2], 0.0 | 1.0 | 2.0)
                     && material.surface[3] >= 1.0
                     && unpack_vec3(material.absorption).min_element() >= 0.0
+                    && (0.0..=1.0).contains(&material.absorption[3])
+                    && (!material.is_glass() || material.absorption[3] == 0.0)
                     && unpack_vec3(material.emission).min_element() >= 0.0,
                 "Invalid material reflectance, transmission or absorption"
             );
@@ -173,14 +175,39 @@ impl Scene {
     ) -> Option<crate::geometry::Hit> {
         self.bvh
             .intersect_filtered(&self.primitives, ray, limit, any, |hit| {
-                let map = self.materials[hit.material].maps[3];
-                map == 0
-                    || self
-                        .textures
-                        .sample(map as usize - 1, self.surface_uv(hit))
-                        .x
-                        >= 0.5
+                self.accepts_cutout(hit)
             })
+    }
+    fn accepts_cutout(&self, hit: &crate::geometry::Hit) -> bool {
+        let map = self.materials[hit.material].maps[3];
+        map == 0
+            || self
+                .textures
+                .sample(map as usize - 1, self.surface_uv(hit))
+                .x
+                >= 0.5
+    }
+    /// Keep early-out shadow traversal while accumulating straight thin-glass transmission.
+    pub fn shadow_transmittance(&self, ray: crate::geometry::Ray, limit: f32) -> f32 {
+        let mut transmission = 1.0;
+        let blocker = self
+            .bvh
+            .intersect_filtered(&self.primitives, ray, limit, true, |hit| {
+                if !self.accepts_cutout(hit) {
+                    return false;
+                }
+                let material = self.materials[hit.material];
+                if material.is_thin_glass() {
+                    transmission *= crate::material::thin_glass_transmittance(
+                        hit.geometric.dot(ray.direction),
+                        material.surface[3],
+                    );
+                    false
+                } else {
+                    true
+                }
+            });
+        if blocker.is_some() { 0.0 } else { transmission }
     }
     /// Texture colors are decoded to linear RGB before shading.
     pub fn surface_color(&self, hit: &crate::geometry::Hit) -> Vec3 {

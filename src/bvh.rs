@@ -144,7 +144,7 @@ impl Bvh {
         ray: Ray,
         mut max_t: f32,
         any: bool,
-        accept: impl Fn(&Hit) -> bool,
+        mut accept: impl FnMut(&Hit) -> bool,
     ) -> Option<Hit> {
         if self.nodes.is_empty() {
             return None;

@@ -152,9 +152,15 @@ bool primitive_hit(device const Primitive &p, Ray ray, float limit, uint index, 
 float3 texture_sample(device const float4 *texels, device const uint4 *textures, uint index,
                       float2 uv);
 float2 surface_uv(Material material, Hit hit);
-bool intersect(device const Primitive *p, device const Node *nodes, Ray ray, float limit,
+float fresnel(float c, float ei, float et);
+float thin_transmittance(float cosine, float ior) {
+    float r = fresnel(clamp(abs(cosine), 0.0f, 1.0f), 1.0f, ior);
+    return (1 - r) / (1 + r);
+}
+bool intersect_impl(device const Primitive *p, device const Node *nodes, Ray ray, float limit,
                bool any_hit, thread Hit &hit, device const Material *materials,
-               device const float4 *texels, device const uint4 *textures) {
+               device const float4 *texels, device const uint4 *textures,
+               bool transmit_sheets, thread float &visibility) {
     uint stack[64];
     uint sp = 1;
     stack[0] = 0;
@@ -172,6 +178,10 @@ bool intersect(device const Primitive *p, device const Node *nodes, Ray ray, flo
                                                               surface_uv(material, candidate))
                                                        .x < .5f)
                         continue;
+                    if (transmit_sheets && material.surface.z == 2) {
+                        visibility *= thin_transmittance(dot(candidate.g, ray.d), material.surface.w);
+                        continue;
+                    }
                     hit = candidate;
                     if (any_hit)
                         return true;
@@ -186,6 +196,19 @@ bool intersect(device const Primitive *p, device const Node *nodes, Ray ray, flo
         }
     }
     return found;
+}
+bool intersect(device const Primitive *p, device const Node *nodes, Ray ray, float limit,
+               bool any_hit, thread Hit &hit, device const Material *materials,
+               device const float4 *texels, device const uint4 *textures) {
+    float visibility = 1;
+    return intersect_impl(p, nodes, ray, limit, any_hit, hit, materials, texels, textures, false, visibility);
+}
+float shadow_transmittance(device const Primitive *p, device const Node *nodes, Ray ray, float limit,
+                           device const Material *materials, device const float4 *texels, device const uint4 *textures) {
+    float visibility = 1;
+    Hit blocker;
+    bool blocked = intersect_impl(p, nodes, ray, limit, true, blocker, materials, texels, textures, true, visibility);
+    return blocked ? 0 : visibility;
 }
 float3 base_color(Material m, float3 p) {
     float3 q = p * m.detail.x;
@@ -209,10 +232,14 @@ float3 base_color(Material m, float3 p) {
 }
 float smith(float n, float a2) { return 2 * n / max(n + sqrt(a2 + (1 - a2) * n * n), 1e-10f); }
 float3 eval(Material m, float3 color, float3 n, float3 wo, float3 wi, thread float &pdf) {
-    float nv = max(dot(n, wo), 0.0f), nl = max(dot(n, wi), 0.0f);
+    float nv = max(dot(n, wo), 0.0f), nl = dot(n, wi);
     pdf = 0;
-    if (nv <= 0 || nl <= 0)
+    if (nv <= 0 || nl == 0)
         return float3(0);
+    if (nl < 0) {
+        pdf = -nl * m.absorption.w / PI;
+        return color * (m.absorption.w / PI);
+    }
     float3 hv = wi + wo;
     if (dot(hv, hv) < 1e-20f)
         return float3(0);
@@ -225,11 +252,15 @@ float3 eval(Material m, float3 color, float3 n, float3 wo, float3 wi, thread flo
     float d = a2 / PI / max(q * q, 1e-16f), g1 = smith(nv, a2), g2 = smith(nl, a2);
     float3 f0 = mix(float3(.04f), color, m.surface.y), f = f0 + (1 - f0) * pow(1 - vh, 5.0f);
     float spec_p = .25f + .5f * m.surface.y;
-    pdf = spec_p * d * g1 / max(4 * nv, 1e-12f) + (1 - spec_p) * nl / PI;
-    return (1 - f) * color * ((1 - m.surface.y) / PI) +
-           f * (d * g1 * g2 / max(4 * nv * nl, 1e-12f));
+    pdf = (spec_p * d * g1 / max(4 * nv, 1e-12f) + (1 - spec_p) * nl / PI) * (1 - m.absorption.w);
+    return ((1 - f) * color * ((1 - m.surface.y) / PI) +
+           f * (d * g1 * g2 / max(4 * nv * nl, 1e-12f))) * (1 - m.absorption.w);
 }
 float3 bsdf_sample(Material m, float3 n, float3 wo, thread uint &rng) {
+    if (m.absorption.w > 0 && random_float(rng) < m.absorption.w) {
+        float2 d = disk(rng);
+        return -to_world(float3(d, sqrt(max(0.0f, 1 - dot(d, d)))), n);
+    }
     if (random_float(rng) >= .25f + .5f * m.surface.y) {
         float2 d = disk(rng);
         return to_world(float3(d, sqrt(max(0.0f, 1 - dot(d, d)))), n);
@@ -484,13 +515,13 @@ float3 volume_light(device const Primitive *primitives, device const Node *nodes
     float phase = medium_phase(params.medium, dot(forward, direction));
     float3 target = offset(light_position, normal, -direction), shadow = target - position;
     Ray ray = {position, normalize(shadow)};
-    Hit blocker;
-    if (intersect(primitives, nodes, ray, length(shadow) - 1e-5f, true, blocker, materials, texels,
-                  textures))
+    float visibility = shadow_transmittance(primitives, nodes, ray, length(shadow) - 1e-5f,
+                                           materials, texels, textures);
+    if (visibility <= 0)
         return float3(0);
     float transmittance = medium_transmittance(params.medium, ray, length(shadow), rng);
     return materials[primitive.info.y].emission.xyz *
-           (transmittance * phase * power(pdf, phase) / max(pdf, 1e-20f));
+           (transmittance * visibility * phase * power(pdf, phase * visibility) / max(pdf, 1e-20f));
 }
 float3 trace(device const Primitive *primitives, device const Node *nodes,
              device const Material *mats, device const Light *lights, constant Params &params,
@@ -549,7 +580,18 @@ float3 trace(device const Primitive *primitives, device const Node *nodes,
             break;
         }
         float3 n = shading_hit.n, wo = -ray.d;
-        if (m.surface.z > .5f) {
+        if (m.surface.z == 2) {
+            float c = clamp(dot(h.g, wo), 0.0f, 1.0f);
+            float transmission = thin_transmittance(c, m.surface.w);
+            float3 direction = ray.d;
+            if (random_float(rng) < 1 - transmission) {
+                direction += 2 * c * h.g;
+                delta = true;
+            } else {
+                prev_pdf *= transmission;
+            }
+            ray = {offset(h.p, h.g, direction), direction};
+        } else if (m.surface.z > .5f) {
             float ei = medium_count > 0 ? mats[media[medium_count - 1]].surface.w : 1;
             float et = h.front ? m.surface.w
                                : (medium_count > 1 ? mats[media[medium_count - 2]].surface.w : 1);
@@ -600,30 +642,32 @@ float3 trace(device const Primitive *primitives, device const Node *nodes,
                 float3 diff = lp - h.p;
                 float dist2 = dot(diff, diff), dist = sqrt(dist2);
                 float3 wi = diff / dist;
-                float cl = abs(dot(ln, -wi)), c = max(dot(n, wi), 0.0f);
-                if (c > 0 && cl > 1e-7f && dot(h.g, wi) > 0) {
+                float cl = abs(dot(ln, -wi)), c = abs(dot(n, wi));
+                if (c > 0 && cl > 1e-7f && dot(n, wi) * dot(h.g, wi) > 0 &&
+                    (dot(h.g, wi) > 0 || m.absorption.w > 0)) {
                     float pdf = light_prob(lights, li) * dist2 / (cl * light.area), bsdf_pdf;
                     float3 f = eval(m, color, n, wo, wi, bsdf_pdf);
                     float3 origin = offset(h.p, h.g, wi), end = offset(lp, ln, -wi),
                            shadow = end - origin;
                     Ray sr = {origin, normalize(shadow)};
-                    Hit blocker;
-                    if (!intersect(primitives, nodes, sr, length(shadow) - 1e-5f, true, blocker,
-                                   mats, texels, textures))
+                    float visibility = shadow_transmittance(primitives, nodes, sr, length(shadow) - 1e-5f,
+                                                            mats, texels, textures);
+                    if (visibility > 0)
                         radiance += beta *
                                     medium_transmittance(params.medium, sr, length(shadow), rng) *
+                                    visibility *
                                     f * mats[p.info.y].emission.xyz *
-                                    (c * power(pdf, bsdf_pdf) / max(pdf, 1e-20f));
+                                    (c * power(pdf, bsdf_pdf * visibility) / max(pdf, 1e-20f));
                 }
             }
             float3 wi = bsdf_sample(m, n, wo, rng);
-            if (dot(wi, h.g) <= 0)
+            if (dot(n, wi) * dot(h.g, wi) <= 0 || (dot(wi, h.g) <= 0 && m.absorption.w <= 0))
                 break;
             float pdf;
             float3 f = eval(m, color, n, wo, wi, pdf);
             if (pdf <= 1e-12f)
                 break;
-            beta *= f * (max(dot(n, wi), 0.0f) / pdf);
+            beta *= f * (abs(dot(n, wi)) / pdf);
             prev_pdf = pdf;
             prev_p = h.p;
             delta = false;

@@ -9,5 +9,12 @@ Converted from the original GLB to Y-up OBJ/MTL. The bundled OBJ retains the ori
 socket and bulb mesh. The apartment replaces the masked shade with physical
 interlaced cane following the original radial profile. The alpha channel is stored
 as a separate opacity map. Lumen assigns scene radiance to the bulb
-for the night preset and reduces the bulb to approximately 80 mm diameter; the shade itself does not emit light. This is a generic
+for the night preset. The original bulb envelope stays approximately 80 mm wide,
+with a separate approximately 11 mm emitting element inside. A thin-dielectric
+model accounts for Fresnel reflection and straight transmission through the glass;
+it approximates a thin envelope rather than tracing its wall thickness explicitly.
+Emitter radiance is scaled inversely with area to retain approximately the former
+lamp output before glass losses.
+The wider, more open cane weave produces actual shadow variation; the shade itself
+does not emit light. This is a generic
 source model, not a manufacturer-certified replica. No endorsement is implied.

@@ -645,6 +645,20 @@ fn night_interior_uses_bulbs_without_daylight_emitters() {
     assert!(scene.sky.max_element() < 0.02);
     let mut pendant = false;
     let mut arc_lamp = false;
+    let mut table_lamp = false;
+    let mut bulb_lo = Vec3::splat(f32::INFINITY);
+    let mut bulb_hi = Vec3::splat(f32::NEG_INFINITY);
+    for primitive in &scene.primitives {
+        if scene.materials[primitive.info[1] as usize].is_thin_glass() {
+            let (lo, hi) = primitive.bounds();
+            bulb_lo = bulb_lo.min(lo);
+            bulb_hi = bulb_hi.max(hi);
+        }
+    }
+    assert!(
+        (0.079..0.081).contains(&(bulb_hi.x - bulb_lo.x)),
+        "Preserve the full-size bulb envelope"
+    );
     for light in &scene.lights {
         let primitive = &scene.primitives[light.primitive as usize];
         let (lo, hi) = primitive.bounds();
@@ -664,10 +678,115 @@ fn night_interior_uses_bulbs_without_daylight_emitters() {
             (center - Vec3::new(0.2, 2.50, -1.35)).length() < 0.1 && power.max_element() > 100.0;
         arc_lamp |= (center - Vec3::new(2.423, 1.777, -3.503)).length() < 0.1
             && power.max_element() > 100.0;
+        table_lamp |=
+            (center - Vec3::new(4.03, 1.059, -0.70)).length() < 0.04 && power.max_element() > 100.0;
     }
     assert!(
-        pendant && arc_lamp,
-        "Both sourced bulb meshes must illuminate the night scene"
+        pendant && arc_lamp && table_lamp,
+        "All three bulb emitters must illuminate the night scene"
+    );
+}
+
+#[test]
+fn thin_diffuse_shade_transmits_constant_radiance_from_either_side() {
+    use lumen_rs::integrator::trace;
+    let tint = Vec3::new(0.62, 0.71, 0.83);
+    let mut scene = scene::preset("studio", 1.0).unwrap();
+    scene.primitives.clear();
+    scene.sky = Vec3::ONE;
+    scene.horizon = Vec3::ONE;
+    let shade = scene.add_material(Material::matte(tint).translucent(1.0));
+    scene.add_quad(
+        Vec3::new(-10.0, -10.0, 0.0),
+        Vec3::X * 20.0,
+        Vec3::Y * 20.0,
+        shade,
+    );
+    scene.finish().unwrap();
+    for side in [-1.0, 1.0] {
+        for sample in 0..256 {
+            let ray = Ray {
+                origin: Vec3::Z * side,
+                direction: -Vec3::Z * side,
+            };
+            let result = trace(&scene, ray, &mut Rng::new(0, sample, 42), 2);
+            assert!((result - tint).abs().max_element() < 1e-5);
+        }
+    }
+}
+
+#[test]
+fn thin_glass_shadows_accumulate_fresnel_losses_and_stop_at_opaque_geometry() {
+    let mut scene = scene::preset("studio", 1.0).unwrap();
+    scene.primitives.clear();
+    let glass = scene.add_material(Material::thin_glass(1.5));
+    for z in [0.0, 1.0] {
+        scene.add_quad(
+            Vec3::new(-2.0, -2.0, z),
+            Vec3::X * 4.0,
+            Vec3::Y * 4.0,
+            glass,
+        );
+    }
+    scene.finish().unwrap();
+    let ray = Ray {
+        origin: Vec3::new(0.2, 0.1, -1.0),
+        direction: Vec3::Z,
+    };
+    let expected = (0.96_f32 / 1.04).powi(2);
+    assert!((scene.shadow_transmittance(ray, 4.0) - expected).abs() < 1e-6);
+    assert!(scene.intersect(ray, 4.0, false).is_some());
+    let opaque = scene.add_material(Material::matte(Vec3::ONE));
+    scene.add_quad(
+        Vec3::new(-2.0, -2.0, 2.0),
+        Vec3::X * 4.0,
+        Vec3::Y * 4.0,
+        opaque,
+    );
+    scene.finish().unwrap();
+    assert_eq!(scene.shadow_transmittance(ray, 4.0), 0.0);
+}
+
+#[test]
+fn thin_glass_light_connections_agree_with_pure_path_sampling() {
+    let mut scene = scene::preset("studio", 1.0).unwrap();
+    scene.primitives.clear();
+    scene.sky = Vec3::ZERO;
+    scene.horizon = Vec3::ZERO;
+    let diffuse = scene.add_material(Material::matte(Vec3::splat(0.7)));
+    let glass = scene.add_material(Material::thin_glass(1.52));
+    let light = scene.add_material(Material::light(Vec3::splat(10.0)));
+    for (z, material) in [(0.0, diffuse), (1.0, glass), (2.0, light)] {
+        scene.add_quad(
+            Vec3::new(-10.0, -10.0, z),
+            Vec3::X * 20.0,
+            Vec3::Y * 20.0,
+            material,
+        );
+    }
+    scene.finish().unwrap();
+    let estimate = |scene: &scene::Scene| {
+        let mut sum = 0.0;
+        for sample in 0..32768 {
+            let ray = Ray {
+                origin: Vec3::new(0.2, 0.1, 0.5),
+                direction: -Vec3::Z,
+            };
+            sum +=
+                lumen_rs::integrator::trace(scene, ray, &mut Rng::new(0, sample, 42), 12).x as f64;
+        }
+        sum / 32768.0
+    };
+    let with_connections = estimate(&scene);
+    scene.lights.clear();
+    for primitive in &mut scene.primitives {
+        primitive.info[2] = 0;
+    }
+    let pure_sampling = estimate(&scene);
+    assert!(pure_sampling > 1.0);
+    assert!(
+        (with_connections - pure_sampling).abs() / pure_sampling < 0.03,
+        "Thin-glass MIS mismatch: connections {with_connections}, pure paths {pure_sampling}"
     );
 }
 
