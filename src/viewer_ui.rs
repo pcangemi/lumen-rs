@@ -121,11 +121,6 @@ impl Canvas {
             pixels: vec![BACKGROUND; width * height],
         }
     }
-    fn pixel(&mut self, x: usize, y: usize, color: u32) {
-        if x < self.width && y < self.height {
-            self.pixels[y * self.width + x] = color;
-        }
-    }
     fn rect(&mut self, rect: Rect, color: u32) {
         for y in rect.y..(rect.y + rect.height).min(self.height) {
             for x in rect.x..(rect.x + rect.width).min(self.width) {
@@ -180,6 +175,37 @@ fn time(seconds: f64) -> String {
 
 /// Draw the same frame for a native window or an exported UI preview.
 pub fn draw(state: &ViewerState, width: usize, height: usize) -> (Vec<u32>, Vec<Button>) {
+    draw_cached(state, width, height, &mut FrameCache::default())
+}
+
+#[derive(Default)]
+pub struct FrameCache {
+    key: Option<FrameKey>,
+    pixels: Vec<u32>,
+}
+
+#[derive(PartialEq, Eq)]
+struct FrameKey {
+    viewport: (usize, usize),
+    image: (u32, u32),
+    exposure_bits: u32,
+    filtered: bool,
+}
+
+impl FrameCache {
+    /// Invalidate after changing the currently displayed linear image.
+    pub fn invalidate(&mut self) {
+        self.key = None;
+    }
+}
+
+/// Retain the scaled display image while redrawing controls and tile activity.
+pub fn draw_cached(
+    state: &ViewerState,
+    width: usize,
+    height: usize,
+    cache: &mut FrameCache,
+) -> (Vec<u32>, Vec<Button>) {
     let mut canvas = Canvas::new(width, height);
     let sidebar_width = 272.min(width / 2);
     let sidebar_x = width.saturating_sub(sidebar_width);
@@ -230,15 +256,31 @@ pub fn draw(state: &ViewerState, width: usize, height: usize) -> (Vec<u32>, Vec<
     let display_height = (state.image_height as f32 * scale).max(1.0) as usize;
     let origin_x = sidebar_x.saturating_sub(display_width) / 2;
     let origin_y = 100 + available_height.saturating_sub(display_height) / 2;
-    for y in 0..display_height {
-        for x in 0..display_width {
-            let source_x = ((x as f32 / scale) as u32).min(state.image_width - 1);
-            let source_y = ((y as f32 / scale) as u32).min(state.image_height - 1);
-            let index = (source_y * state.image_width + source_x) as usize;
-            canvas.pixel(
-                origin_x + x,
-                origin_y + y,
-                color(state.display_pixels()[index], state.exposure),
+    let key = FrameKey {
+        viewport: (width, height),
+        image: (state.image_width, state.image_height),
+        exposure_bits: state.exposure.to_bits(),
+        filtered: state.show_filtered && state.filtered_pixels.is_some(),
+    };
+    if cache.key.as_ref() != Some(&key) {
+        cache.pixels.resize(display_width * display_height, 0);
+        for y in 0..display_height {
+            for x in 0..display_width {
+                let source_x = ((x as f32 / scale) as u32).min(state.image_width - 1);
+                let source_y = ((y as f32 / scale) as u32).min(state.image_height - 1);
+                let index = (source_y * state.image_width + source_x) as usize;
+                cache.pixels[y * display_width + x] =
+                    color(state.display_pixels()[index], state.exposure);
+            }
+        }
+        cache.key = Some(key);
+    }
+    let visible_width = display_width.min(width.saturating_sub(origin_x));
+    for y in 0..display_height.min(height.saturating_sub(origin_y)) {
+        let destination = (origin_y + y) * width + origin_x;
+        if visible_width > 0 {
+            canvas.pixels[destination..destination + visible_width].copy_from_slice(
+                &cache.pixels[y * display_width..y * display_width + visible_width],
             );
         }
     }
@@ -433,6 +475,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn cached_frames_follow_exposure_size_and_display_mode() {
+        let mut state = ViewerState::new(32, 20, 512, 50, "interior-night", 0.0);
+        state.pixels.fill(Vec3::new(0.4, 0.2, 0.1));
+        state.filtered_pixels = Some(vec![Vec3::new(0.1, 0.2, 0.4); 32 * 20]);
+        let mut cache = FrameCache::default();
+        let original = draw_cached(&state, 640, 480, &mut cache).0;
+        assert_eq!(original, draw(&state, 640, 480).0);
+        for filtered in [false, true] {
+            state.show_filtered = filtered;
+            for exposure in [-1.0, 0.0, 1.0] {
+                state.exposure = exposure;
+                for (width, height) in [(800, 600), (640, 480), (1, 1)] {
+                    assert_eq!(
+                        draw_cached(&state, width, height, &mut cache).0,
+                        draw(&state, width, height).0,
+                    );
+                }
+            }
+        }
+        state.exposure = 0.0;
+        state.filtered_pixels.as_mut().unwrap().fill(Vec3::ONE);
+        cache.invalidate();
+        let changed = draw_cached(&state, 640, 480, &mut cache).0;
+        assert_ne!(original, changed);
+        assert_eq!(changed, draw(&state, 640, 480).0);
+    }
+
+    #[test]
     fn clean_preview_keeps_tile_activity_visible() {
         let mut state = ViewerState::new(320, 200, 512, 12, "interior", 0.0);
         state.filtered_pixels = Some(vec![Vec3::splat(0.4); 320 * 200]);
@@ -444,9 +514,10 @@ mod tests {
             width: 64,
             height: 64,
         });
-        let (active, _) = draw(&state, 1280, 820);
+        let mut cache = FrameCache::default();
+        let (active, _) = draw_cached(&state, 1280, 820, &mut cache);
         state.last_tile = None;
-        let (inactive, _) = draw(&state, 1280, 820);
+        let (inactive, _) = draw_cached(&state, 1280, 820, &mut cache);
         let outline = active
             .iter()
             .zip(inactive)

@@ -955,3 +955,40 @@ fn metal_offline_tiles_cover_odd_film_edges() {
     assert_eq!(offline.stats.invalid_samples, 0);
     assert_eq!(offline.pixels, progressive.pixels);
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "requires a Metal GPU accessible to the test process"]
+fn metal_adaptive_sampling_is_batch_invariant() {
+    let scene = scene::preset("studio", 129.0 / 65.0).unwrap();
+    let settings = RenderSettings {
+        width: 129,
+        height: 65,
+        samples: 64,
+        batch: 1,
+        min_samples: 16,
+        adaptive: 0.2,
+        max_depth: 8,
+        ..Default::default()
+    };
+    let single = lumen_rs::metal_backend::render(&scene, settings).unwrap();
+    let batched = lumen_rs::metal_backend::render(
+        &scene,
+        RenderSettings {
+            batch: 16,
+            ..settings
+        },
+    )
+    .unwrap();
+    assert!(single.samples.iter().any(|&count| count < settings.samples));
+    assert!(
+        single
+            .samples
+            .iter()
+            .all(|&count| count >= settings.min_samples)
+    );
+    assert_eq!(single.samples, batched.samples);
+    assert_eq!(single.pixels, batched.pixels);
+    assert_eq!(single.stats.invalid_samples, 0);
+    assert_eq!(batched.stats.invalid_samples, 0);
+}

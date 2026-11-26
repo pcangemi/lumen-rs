@@ -49,6 +49,7 @@ struct Args {
     exposure: f32,
     #[arg(long, default_value_t = 0.0)]
     adaptive: f32,
+    /// CPU rendering and auxiliary work; does not set Metal GPU thread counts.
     #[arg(long)]
     threads: Option<usize>,
     /// Export the actual UI drawing without creating a window (CPU validation).
@@ -100,7 +101,7 @@ impl Drop for Job {
     }
 }
 fn start(args: &Args) -> Job {
-    let (sender, receiver) = mpsc::sync_channel(4);
+    let (sender, receiver) = mpsc::sync_channel(64);
     let control = Arc::new(RenderControl::default());
     let worker_control = Arc::clone(&control);
     let args = args.clone();
@@ -305,6 +306,24 @@ fn update(state: &mut ViewerState, event: Event, cancelled: bool) {
         }
     }
 }
+
+fn update_cached(
+    state: &mut ViewerState,
+    event: Event,
+    cancelled: bool,
+    cache: &mut viewer_ui::FrameCache,
+) {
+    let filtered = state.show_filtered && state.filtered_pixels.is_some();
+    let image_changed = match &event {
+        Event::Tile(_) | Event::Finished(_) => !filtered,
+        Event::Denoised { .. } => state.show_filtered,
+        _ => false,
+    };
+    if image_changed {
+        cache.invalidate();
+    }
+    update(state, event, cancelled);
+}
 fn save_png(state: &ViewerState) -> Result<PathBuf> {
     let path = PathBuf::from("renders").join(format!("{}-live.png", state.scene));
     std::fs::create_dir_all("renders")?;
@@ -407,13 +426,15 @@ fn main() -> Result<()> {
         args.exposure,
     );
     let mut job = start(&args);
+    let mut frame_cache = viewer_ui::FrameCache::default();
     let mut mouse_was_down = false;
     while window.is_open() {
         for event in job.receiver.try_iter().take(32) {
-            update(
+            update_cached(
                 &mut state,
                 event,
                 job.control.cancelled.load(Ordering::Relaxed),
+                &mut frame_cache,
             );
         }
         if !state.finished {
@@ -424,7 +445,7 @@ fn main() -> Result<()> {
             window.update();
             continue;
         }
-        let (pixels, buttons) = viewer_ui::draw(&state, width, height);
+        let (pixels, buttons) = viewer_ui::draw_cached(&state, width, height, &mut frame_cache);
         let mut action = None;
         let mouse_down = window.get_mouse_down(MouseButton::Left);
         if mouse_down
@@ -484,6 +505,7 @@ fn main() -> Result<()> {
                     &args.scene,
                     args.exposure,
                 );
+                frame_cache.invalidate();
             }
             Some(Action::Save) => match save_png(&state) {
                 Ok(path) => {
@@ -505,6 +527,43 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn render_events_refresh_the_visible_frame() {
+        let mut state = ViewerState::new(8, 8, 16, 50, "studio", 0.0);
+        let mut cache = viewer_ui::FrameCache::default();
+        let events = [
+            Event::Tile(TileUpdate {
+                tile: progressive::Tile {
+                    x: 0,
+                    y: 0,
+                    width: 8,
+                    height: 8,
+                },
+                pixels: vec![glam::Vec3::X; 64],
+                completed_samples: 64,
+                progress: 1.0 / 16.0,
+                pass_samples: 1,
+                pass_complete: true,
+                elapsed: Duration::from_millis(10),
+            }),
+            Event::Denoised {
+                pixels: vec![glam::Vec3::Y; 64],
+                samples: 8,
+            },
+            Event::Denoised {
+                pixels: vec![glam::Vec3::Z; 64],
+                samples: 16,
+            },
+        ];
+        for event in events {
+            let before = viewer_ui::draw_cached(&state, 640, 480, &mut cache).0;
+            update_cached(&mut state, event, false, &mut cache);
+            let after = viewer_ui::draw_cached(&state, 640, 480, &mut cache).0;
+            assert_ne!(before, after);
+            assert_eq!(after, viewer_ui::draw(&state, 640, 480).0);
+        }
+    }
 
     #[test]
     #[ignore = "requires the optional Open Image Denoise runtime"]

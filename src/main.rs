@@ -42,6 +42,7 @@ struct Args {
     batch: u32,
     #[arg(long, default_value_t = 0.0)]
     exposure: f32,
+    /// CPU rendering and auxiliary work; does not set Metal GPU thread counts.
     #[arg(long)]
     threads: Option<usize>,
     #[arg(short, long, default_value = "renders/render.png")]

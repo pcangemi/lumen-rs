@@ -4,7 +4,7 @@
 
 A built-in preset or validated JSON file produces geometry and materials. OBJ meshes are triangulated once at load time. BVH construction reorders primitives into contiguous leaf ranges; only then are emissive primitives indexed and their sampling probabilities normalized.
 
-The renderer owns this immutable scene. Each camera sample has a deterministic random stream based on pixel index, sample index, and seed. Path state stays on the stack. The CPU backend distributes independent pixels through Rayon. The progressive backend schedules 64-pixel tiles in center-first passes. Metal consumes the same packed geometry, material, camera, light, and BVH records. Both Metal modes dispatch 64 × 64 tiles, starting at one sample and adapting later batches using completed GPU command timings. The slowest tile in each pass guides the next batch toward 20 ms, with at most twofold growth and a 16-sample ceiling. The requested batch size remains an upper limit. Offline rendering reads the film once at completion; the viewer reads completed regions. GPU regressions check exact pixel equality across these scheduling modes and different batch limits.
+The renderer owns this immutable scene. Each camera sample has a deterministic random stream based on pixel index, sample index, and seed. Path state stays on the stack. The CPU backend distributes independent pixels through Rayon. The progressive backend schedules 64-pixel tiles in center-first passes. Metal consumes the same packed geometry, material, camera, light, and BVH records. Both Metal modes dispatch 128 × 128 tiles, starting at one sample and adapting later batches using completed GPU command timings. The slowest tile in each pass guides the next batch toward 20 ms, with at most twofold growth and a 16-sample ceiling. The requested batch size remains an upper limit. Offline rendering reads the film once at completion; the viewer reads completed regions. GPU regressions check exact pixel equality across these scheduling modes and different batch limits. Metal defers normals and UVs until the nearest accepted intersection, except when opacity or thin-glass transmission requires them during traversal. Opaque shadow rays return after the geometric intersection. Fixed-sample rendering skips unused variance updates; radiance accumulation and random streams remain unchanged.
 
 The native window owns a separate linear image. A worker sends completed tile copies through a channel bounded to four events. Pause and cancellation use atomics checked at tile boundaries. Changing exposure only changes the display transform. Restarting or switching scenes cancels the old worker, drops its receiver, and starts a new job; stale events cannot overwrite the new image.
 
@@ -35,6 +35,8 @@ The native window owns a separate linear image. A worker sends completed tile co
 | `output` | Exposure, display transform, PNG, OpenEXR, metadata |
 | `viewer_ui` | Window-independent interface drawing |
 | `bin/viewer` | Native window, controls, worker lifecycle, event handling |
+
+The native viewer retains the scaled display image across frames. Render events invalidate it when visible pixels change; exposure, resize and raw/clean selection are part of the cache key. Controls and tile outlines are drawn every frame. The worker event queue is bounded to 64 entries to absorb bursts of completed tiles.
 
 ## Conventions
 
@@ -73,6 +75,6 @@ Image textures include base color, tangent-space normals, roughness, metalness a
 
 The standard suite checks BVH traversal against brute force, parallel slab boundaries, surface interpolation, dielectric Fresnel and total internal reflection, approximate BRDF energy and reciprocity, constant-radiance transmission through clear glass, outward box winding, OBJ rendering, thread determinism, GPU record sizes, progressive/offline equivalence, cancellation, texture filtering, MTL-relative texture paths, water boundary orientation, Beer–Lambert slab transmission, phase-function sampling and volume transmittance.
 
-Native-window input requires a desktop session, and Metal execution requires an accessible GPU. The headless UI preview and shader compilation do not establish those runtime properties. The optional OIDN test checks noise reduction against a known constant field. The two ignored GPU tests cover all five presets, batch invariance and partial tiles on an accessible device.
+Native-window input requires a desktop session, and Metal execution requires an accessible GPU. The headless UI preview and shader compilation do not establish those runtime properties. The optional OIDN test checks noise reduction against a known constant field. The three ignored GPU tests cover all five presets, batch invariance, partial tiles and adaptive stopping on an accessible device.
 
 A dependency of the Metal binding (`block` 0.1.6) emits an upstream future-compatibility warning on the current Rust toolchain; project code passes Clippy without warnings.

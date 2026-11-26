@@ -5,9 +5,10 @@ Validated on 2026-11-26 with Apple M1 Pro, 10 CPU threads and Blender 5.3.0.
 ## Current automated checks
 
 - Rust formatting and Clippy with warnings denied: passed.
-- Standard release physics suite: 26 passed; two GPU tests are deliberately ignored in this suite.
+- Standard release physics suite: 26 passed; three GPU tests are deliberately ignored in this suite.
 - Metal shader compilation: passed.
-- Metal runtime regressions on the M1 Pro: two passed, covering all five presets, finite samples, exact batch invariance and partial film edges.
+- Metal runtime regressions on the M1 Pro: three passed, covering all five presets, finite samples, exact batch invariance, partial film edges and adaptive stopping.
+- Viewer cache regressions: passed for changed pixels, exposure, resizing, raw/clean selection and live tile outlines. The optional worker test delivered the final denoised image before completion.
 - Night lighting regression: all three lamp emitters are active, the pendant retains its 80 mm bulb envelope, and daylight emitters are absent.
 - All seven public street lamps are active; any projected within the camera field of view are occluded from direct sight.
 - Canvas alignment, architectural clearances and outward wavy-glass boundaries: passed.
@@ -31,6 +32,25 @@ The standard suite also covers linear PBR maps, mirrored tangent frames, leaf op
 | Clouds | 1222.799 | 1222.799 |
 
 Mean luminance differs by less than 0.6% in this run. GPU results are exactly equal across requested batch limits and offline/progressive rendering, including adaptive command sizing. A separate 277 × 71 render checks non-divisible film edges and a 17-sample final partial pass. Statistical CPU/GPU agreement does not establish equality of every path.
+
+## Metal throughput with identical pixels
+
+The [paired performance report](results/m1-pro-metal-throughput.json) compares the executable from `9e40a6f` with the optimized renderer on the same M1 Pro. Both use the complete night apartment at **1920 × 1080, 16 samples per pixel, 50 bounces**, seed 42, with adaptive sampling and denoising disabled. Three pairs alternate execution order. The viewer was paused; exploratory runs overlapping an active viewer are excluded.
+
+| Transport time | Previous executable | Optimized executable |
+| --- | ---: | ---: |
+| Pair 1 | 68.631 s | 36.599 s |
+| Pair 2 | 77.382 s | 36.286 s |
+| Pair 3 | 77.009 s | 39.757 s |
+| Median | **77.009 s** | **36.599 s** |
+
+Measured throughput improved **2.10×**, or **52.5% less transport time**. All six runs retained 1,818,546 primitives, 1,108,345 BVH nodes, 43 textures and every requested sample. Each pair's raw linear EXR comparison has zero maximum absolute error and zero RMSE. No invalid samples or command failures occurred. The longest optimized GPU command across the three runs was 43.08 ms.
+
+Metal now dispatches up to 16,384 independent pixels per tile instead of 4,096, while retaining 128 threads per threadgroup on this device and timing-based sample batches. Intersection traversal defers shading attributes until needed, opaque visibility avoids them entirely, and fixed-sample renders omit unused variance calculations. The scene, sampling sequence, radiance accumulation, materials and bounce limit remain unchanged.
+
+These timings cover transport and its submission/readback overhead, excluding scene loading, shader compilation, file output and denoising. This is a 16-sample throughput benchmark, not a completed 2,048-sample render or a final-image convergence claim. It does not establish a 2.10× gain on every scene, machine or concurrent workload.
+
+The viewer additionally caches unchanged display pixels and buffers up to 64 worker events. `cargo run --release --example benchmark_viewer` compares cached and uncached drawing with identical output. This CPU drawing measurement is separate from the transport ratio above; native interactive performance still depends on the window and other applications.
 
 ## Small emitter visibility
 
@@ -58,9 +78,9 @@ The same probe traces paired normal-view surface paths with all lights at depth 
 
 ## Metal scheduling
 
-The dense apartment exposed command-buffer failures, including a user-reported `Impacting Interactivity` diagnostic. Offline full-film dispatch was replaced by 64 × 64 tiles. Both modes now start at one sample per command and use the previous pass's slowest measured GPU command to size the next pass, targeting 20 ms and growing at most twofold up to 16 samples. Every requested sample is retained, and there are no artificial delays. CPU/GPU transfer and scene construction remain outside these command timings.
+The dense apartment exposed command-buffer failures, including a user-reported `Impacting Interactivity` diagnostic. Offline full-film dispatch was initially replaced by 64 × 64 tiles. The current Metal tile is 128 × 128, providing four times as many independent pixel paths per full dispatch. Both modes start at one sample per command and use the previous pass's slowest measured GPU command to size the next pass, targeting 20 ms and growing at most twofold up to 16 samples. Every requested sample is retained, and there are no artificial delays. CPU/GPU transfer and scene construction remain outside these command timings.
 
-The target is a heuristic, not a promise that future commands cannot exceed it. Reports include command count, total GPU command time, longest command and maximum samples per command. Error reports retain the driver message, tile and sample range. Failed commands are not retried because their writes may be incomplete. Native desktop responsiveness and competing GPU workloads still need interactive assessment.
+The target is a heuristic, not a promise that future commands cannot exceed it; a one-sample tile can exceed the target. Reports include command count, total GPU command time, longest command, maximum samples per command, tile size and threads per threadgroup. Error reports retain the driver message, tile and sample range. Failed commands are not retried because their writes may be incomplete. Native desktop responsiveness and competing GPU workloads still need interactive assessment.
 
 Six [IORegistry readings](results/m1-pro-boucle-gpu-activity.json) taken five seconds apart during the revised Full HD night render reported 92–97% GPU device utilization. These are system-wide counters, not exclusive process occupancy or proof of optimal kernel efficiency.
 

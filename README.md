@@ -20,7 +20,7 @@ The optional denoiser installer downloads a checksum-verified Open Image Denoise
 
 Use `--backend cpu` for CPU rendering, or `--backend auto` to select an accessible Metal device. A restricted process may be unable to enumerate GPUs even when a normal Terminal session can. An explicitly requested Metal render fails clearly if no GPU is accessible.
 
-The viewer schedules real 64 × 64 rendering tiles in center-first passes. The sidebar reports device, elapsed time, estimated remaining time, samples, camera sample throughput, primitive count and BVH size.
+The viewer schedules real rendering tiles in center-first passes: 64 × 64 on CPU and 128 × 128 on Metal. The sidebar reports device, elapsed time, estimated remaining time, samples, camera sample throughput, primitive count and BVH size.
 
 | Control | Action |
 | --- | --- |
@@ -62,13 +62,16 @@ Each render writes a PNG and a JSON performance report. `--exr` preserves linear
 - A bounded participating medium with homogeneous or procedural cloud density, delta tracking, ratio-tracked shadow transmittance, multiple scattering and a Henyey–Greenstein phase function.
 - Subpixel antialiasing, thin-lens depth of field, sRGB color decoding, linear data maps, tangent-space normal mapping and bilinear sampling.
 - A flat 16-bin SAH BVH, near-first traversal, early-out shadow rays, stack-based path state, Russian roulette and Rayon parallelism.
-- Native Metal compute with shared scene records and shared-memory image buffers. Both modes use 64 × 64 tiles, starting at one sample per submission and adjusting batch size from completed GPU timings toward a 20 ms command budget, capped at 16 samples. Offline rendering avoids intermediate film readbacks. No artificial delays or dropped samples; no per-bounce heap allocations.
+- Native Metal compute with shared scene records and shared-memory image buffers. Both Metal modes use 128 × 128 tiles (16,384 independent paths per full tile), starting at one sample per submission and adjusting batch size from completed GPU timings toward a 20 ms command budget, capped at 16 samples. CPU tiles remain 64 × 64. Offline rendering avoids intermediate film readbacks. No artificial delays or dropped samples; no per-bounce heap allocations.
+- Deferred Metal hit attributes: opaque shadow blockers need intersection tests only; normals and UVs are evaluated for the nearest accepted surface. Opacity masks and transmitting glass still evaluate the attributes they need. Fixed-sample renders skip unused variance calculations.
 - Optional adaptive sampling, disabled by default because statistical stopping can bias estimates and miss rare bright paths.
 - Optional albedo/normal-guided Open Image Denoise filtering on CPU.
 
 Caustic paths are represented by path tracing, but difficult specular-to-diffuse paths can converge slowly. There is **no dedicated caustic solver** yet. Denoising does not establish transport accuracy or remove that sampling limitation. Native Metal acceleration structures, wavefront scheduling and competitive speedups remain work to measure, not implemented performance claims.
 
-Metal reports command count, total GPU command time, longest command and maximum batch size in each JSON report. The 20 ms target is a scheduling heuristic, not a hard latency guarantee: scene complexity, competing applications and system load can change execution time. A failed command stops the render with its driver diagnostic and sample range; partially written work is not silently retried.
+Metal reports command count, total GPU command time, longest command, maximum batch size, tile size and threads per threadgroup in each JSON report. The 20 ms target is a scheduling heuristic, not a hard latency guarantee: scene complexity, competing applications and system load can change execution time. A one-sample tile can exceed the target. A failed command stops the render with its driver diagnostic and sample range; partially written work is not silently retried.
+
+The viewer caches the scaled, tone-mapped image until visible pixels, exposure, display mode or window size change. Controls and tile activity remain live. A bounded update queue lets the renderer continue between UI frames. `--threads` controls CPU rendering and auxiliary Rayon work; Metal dispatch parallelism is independent of that setting.
 
 ### Samples and reflections
 
@@ -133,7 +136,7 @@ cargo test --locked --release --lib oidn_reduces_noise -- --ignored
 ./scripts/check-metal.sh
 ```
 
-The OIDN test requires the optional runtime. The Metal test requires an accessible GPU and checks all five presets, CPU/GPU luminance agreement, finite samples, exact GPU batch invariance and partial offline tiles. Those tests are explicitly ignored in the standard suite; an ignored test is not a GPU validation.
+The OIDN test requires the optional runtime. The Metal tests require an accessible GPU and check all five presets, CPU/GPU luminance agreement, finite samples, exact GPU batch invariance, partial offline tiles and adaptive stopping. Those tests are explicitly ignored in the standard suite; an ignored test is not a GPU validation.
 
 ```bash
 ./target/release/viewer --headless-preview renders/viewer.png --scene interior --samples 128
@@ -157,6 +160,17 @@ For transport-only Lumen measurements:
 ```bash
 python3 scripts/benchmark.py --backend both --repeats 3
 ```
+
+To compare an earlier binary against the current build with exactly matching raw pixels:
+
+```bash
+python3 scripts/compare-metal-performance.py --baseline /path/to/earlier/lumen-rs
+cargo run --release --example benchmark_viewer
+```
+
+The paired Metal benchmark alternates execution order, defaults to Full HD with 16 samples and 50 bounces, and rejects changed scene counts, incomplete sampling or any linear pixel difference. Keep other renders paused. The viewer example measures unchanged-frame CPU drawing separately; its ratio is not a light-transport speedup.
+
+The [M1 Pro validation record](docs/VALIDATION.md#metal-throughput-with-identical-pixels) reports a **2.10× transport speedup** over `9e40a6f` on the complete Full HD night scene at 16 samples and 50 bounces, with exact raw-pixel equality across three paired runs. This is not a measured duration for a complete 2,048-sample render.
 
 Camera samples per second are not rays per second. Every sample can trace several path and shadow rays. No result in this repository establishes that Lumen is faster than a production renderer at equal final-image quality.
 

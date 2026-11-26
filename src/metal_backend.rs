@@ -1,5 +1,5 @@
 //! Native Metal compute backend. Buffers use explicit 16-byte records shared with MSL.
-use crate::progressive::{RenderControl, TileUpdate, tiles};
+use crate::progressive::{RenderControl, TileUpdate, tiles_with_size};
 use crate::{
     camera::Camera,
     geometry::pack_vec3,
@@ -25,6 +25,7 @@ struct Params {
     tile: [u32; 4],
     medium: crate::medium::Medium,
 }
+
 fn buffer<T: Pod>(device: &Device, data: &[T]) -> Buffer {
     if data.is_empty() {
         device.new_buffer(16, MTLResourceOptions::StorageModeShared)
@@ -138,6 +139,9 @@ fn render_impl(
         // Start conservatively, then use the slowest tile's GPU time to size the next
         // pass. This limits individual submissions without sleeping or dropping samples.
         const TARGET_COMMAND_SECONDS: f64 = 0.020;
+        // More independent paths per dispatch improve GPU utilization. Retain
+        // short, timed submissions rather than dispatching the entire film.
+        const TILE_SIZE: u32 = 128;
         let mut sample_batch = 1;
         let mut sample = 0;
         let mut dispatch_stats = GpuDispatchStats {
@@ -145,8 +149,10 @@ fn render_impl(
             gpu_seconds: 0.0,
             max_command_seconds: 0.0,
             max_samples_per_command: 0,
+            threads_per_threadgroup: threads,
+            tile_size: TILE_SIZE,
         };
-        let tiles = tiles(s.width, s.height);
+        let tiles = tiles_with_size(s.width, s.height, TILE_SIZE);
         'passes: while sample < s.samples {
             let pass_end = s.samples.min(sample + sample_batch);
             let mut slowest_command: f64 = 0.0;

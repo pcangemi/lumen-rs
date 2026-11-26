@@ -51,14 +51,18 @@ impl Tile {
 
 /// Tiles start near the image center, so the subject appears early.
 pub fn tiles(width: u32, height: u32) -> Vec<Tile> {
+    tiles_with_size(width, height, TILE_SIZE)
+}
+
+pub(crate) fn tiles_with_size(width: u32, height: u32, size: u32) -> Vec<Tile> {
     let mut tiles = Vec::new();
-    for y in (0..height).step_by(TILE_SIZE as usize) {
-        for x in (0..width).step_by(TILE_SIZE as usize) {
+    for y in (0..height).step_by(size as usize) {
+        for x in (0..width).step_by(size as usize) {
             tiles.push(Tile {
                 x,
                 y,
-                width: TILE_SIZE.min(width - x),
-                height: TILE_SIZE.min(height - y),
+                width: size.min(width - x),
+                height: size.min(height - y),
             });
         }
     }

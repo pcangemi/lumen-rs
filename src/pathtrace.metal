@@ -40,6 +40,10 @@ struct Hit {
     uint primitive, material;
     bool front;
 };
+struct SurfaceIntersection {
+    float t;
+    float2 barycentric;
+};
 constant float PI = 3.14159265358979323846f;
 uint hash32(uint x) {
     x ^= x >> 16;
@@ -97,9 +101,11 @@ bool box_hit(float3 lo, float3 hi, Ray r, float limit) {
     }
     return true;
 }
-bool primitive_hit(device const Primitive &p, Ray ray, float limit, uint index, thread Hit &hit) {
+// Visibility needs distance only for opaque surfaces. Keep normals and UVs out of
+// that path, particularly the transcendental functions used for sphere UVs.
+bool primitive_intersection(device const Primitive &p, Ray ray, float limit,
+                            thread SurfaceIntersection &intersection) {
     float t;
-    float3 outward, shading;
     if (p.info.x == 0) {
         float3 oc = ray.o - p.p0.xyz;
         float b = dot(oc, ray.d);
@@ -113,9 +119,7 @@ bool primitive_hit(device const Primitive &p, Ray ray, float limit, uint index, 
             t = -b + d;
         if (t <= 1e-5f || t >= limit)
             return false;
-        outward = normalize(oc + ray.d * t);
-        shading = outward;
-        hit.uv = float2(.5f + atan2(outward.z, outward.x) / (2 * PI), .5f - asin(outward.y) / PI);
+        intersection.barycentric = 0;
     } else {
         float3 e1 = p.p1.xyz, e2 = p.p2.xyz, q = cross(ray.d, e2);
         float det = dot(e1, q);
@@ -133,8 +137,25 @@ bool primitive_hit(device const Primitive &p, Ray ray, float limit, uint index, 
         t = dot(e2, q) * inv;
         if (t <= 1e-5f || t >= limit)
             return false;
+        intersection.barycentric = float2(u, w);
+    }
+    intersection.t = t;
+    return true;
+}
+Hit surface_hit(device const Primitive &p, Ray ray, uint index,
+                SurfaceIntersection intersection) {
+    Hit hit;
+    float t = intersection.t;
+    float3 outward, shading;
+    if (p.info.x == 0) {
+        float3 oc = ray.o - p.p0.xyz;
+        outward = normalize(oc + ray.d * t);
+        shading = outward;
+        hit.uv = float2(.5f + atan2(outward.z, outward.x) / (2 * PI), .5f - asin(outward.y) / PI);
+    } else {
+        float u = intersection.barycentric.x, w = intersection.barycentric.y;
         hit.uv = p.uv01.xy * (1 - u - w) + p.uv01.zw * u + p.uv2.xy * w;
-        outward = normalize(cross(e1, e2));
+        outward = normalize(cross(p.p1.xyz, p.p2.xyz));
         shading = p.n0.xyz * (1 - u - w) + p.n1.xyz * u + p.n2.xyz * w;
         shading = dot(shading, shading) > 1e-12f ? normalize(shading) : outward;
     }
@@ -149,7 +170,7 @@ bool primitive_hit(device const Primitive &p, Ray ray, float limit, uint index, 
     hit.p = ray.o + t * ray.d;
     hit.primitive = index;
     hit.material = p.info.y;
-    return true;
+    return hit;
 }
 float3 texture_sample(device const float4 *texels, device const uint4 *textures, uint index,
                       float2 uv);
@@ -167,28 +188,37 @@ bool intersect_impl(device const Primitive *p, device const Node *nodes, Ray ray
     uint sp = 1;
     stack[0] = 0;
     bool found = false;
+    uint closest_primitive = 0;
+    SurfaceIntersection closest_intersection;
     while (sp > 0) {
         device const Node &node = nodes[stack[--sp]];
         if (!box_hit(node.lo.xyz, node.hi.xyz, ray, limit))
             continue;
         if (node.data.y > 0) {
             for (uint i = node.data.x; i < node.data.x + node.data.y; i++) {
-                Hit candidate;
-                if (primitive_hit(p[i], ray, limit, i, candidate)) {
-                    Material material = materials[candidate.material];
-                    if (material.maps.w > 0 && texture_sample(texels, textures, material.maps.w - 1,
-                                                              surface_uv(material, candidate))
-                                                       .x < .5f)
-                        continue;
-                    if (transmit_sheets && material.surface.z == 2) {
-                        visibility *= thin_transmittance(dot(candidate.g, ray.d), material.surface.w);
-                        continue;
+                SurfaceIntersection intersection;
+                if (primitive_intersection(p[i], ray, limit, intersection)) {
+                    Material material = materials[p[i].info.y];
+                    if (any_hit && material.maps.w == 0 &&
+                        (!transmit_sheets || material.surface.z != 2))
+                        return true;
+                    if (material.maps.w > 0 || (transmit_sheets && material.surface.z == 2)) {
+                        Hit candidate = surface_hit(p[i], ray, i, intersection);
+                        if (material.maps.w > 0 && texture_sample(texels, textures, material.maps.w - 1,
+                                                                  surface_uv(material, candidate))
+                                                           .x < .5f)
+                            continue;
+                        if (transmit_sheets && material.surface.z == 2) {
+                            visibility *= thin_transmittance(dot(candidate.g, ray.d), material.surface.w);
+                            continue;
+                        }
                     }
-                    hit = candidate;
                     if (any_hit)
                         return true;
                     found = true;
-                    limit = hit.t;
+                    limit = intersection.t;
+                    closest_primitive = i;
+                    closest_intersection = intersection;
                 }
             }
         } else {
@@ -197,6 +227,10 @@ bool intersect_impl(device const Primitive *p, device const Node *nodes, Ray ray
             stack[sp++] = positive ? node.data.x : node.data.z;
         }
     }
+    // Only the nearest accepted surface needs shading attributes. Masked surfaces
+    // and transmitting sheets above still evaluate them during traversal.
+    if (found)
+        hit = surface_hit(p[closest_primitive], ray, closest_primitive, closest_intersection);
     return found;
 }
 bool intersect(device const Primitive *p, device const Node *nodes, Ray ray, float limit,
@@ -691,7 +725,8 @@ pathtrace(device const Primitive *primitives [[buffer(0)]], device const Node *n
           device const Material *materials [[buffer(2)]], device const Light *lights [[buffer(3)]],
           device float4 *film [[buffer(4)]], device float4 *moments [[buffer(5)]],
           constant Params &params [[buffer(6)]], device const float4 *texels [[buffer(7)]],
-          device const uint4 *textures [[buffer(8)]], uint local_id [[thread_position_in_grid]]) {
+          device const uint4 *textures [[buffer(8)]],
+          uint local_id [[thread_position_in_grid]]) {
     if (local_id >= params.tile.z * params.tile.w)
         return;
     uint id = (params.tile.y + local_id / params.tile.z) * params.image.x + params.tile.x +
@@ -719,14 +754,16 @@ pathtrace(device const Primitive *primitives [[buffer(0)]], device const Node *n
         }
         sum.xyz += color;
         sum.w += 1;
-        float l = lum(color), delta = l - moment.x;
-        moment.x += delta / sum.w;
-        moment.y += delta * (l - moment.x);
-        if (params.adaptive.x > 0 && sum.w >= float(params.config.w) && uint(sum.w) % 16 == 0) {
-            float error = 1.96f * sqrt(moment.y / (sum.w - 1) / sum.w);
-            if (error < params.adaptive.x * max(moment.x, .02f)) {
-                moment.z = 1;
-                break;
+        if (params.adaptive.x > 0) {
+            float l = lum(color), delta = l - moment.x;
+            moment.x += delta / sum.w;
+            moment.y += delta * (l - moment.x);
+            if (sum.w >= float(params.config.w) && uint(sum.w) % 16 == 0) {
+                float error = 1.96f * sqrt(moment.y / (sum.w - 1) / sum.w);
+                if (error < params.adaptive.x * max(moment.x, .02f)) {
+                    moment.z = 1;
+                    break;
+                }
             }
         }
     }

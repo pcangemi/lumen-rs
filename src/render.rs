@@ -70,6 +70,8 @@ pub struct GpuDispatchStats {
     pub gpu_seconds: f64,
     pub max_command_seconds: f64,
     pub max_samples_per_command: u32,
+    pub threads_per_threadgroup: u64,
+    pub tile_size: u32,
 }
 
 #[derive(Serialize, Debug)]
