@@ -1,0 +1,46 @@
+{
+  "camera_samples": 68000,
+  "example_path": {
+    "camera": [
+      3.049999952316284,
+      1.649999976158142,
+      4.099999904632568
+    ],
+    "pixel": [
+      661,
+      533
+    ],
+    "surface_vertices": [
+      [
+        -15.629990577697754,
+        0.5379631519317627,
+        -14.512300491333008
+      ],
+      [
+        -5.869999885559082,
+        -0.05343163013458252,
+        -24.153575897216797
+      ],
+      [
+        -5.754559516906738,
+        -0.06039753928780556,
+        -24.26713752746582
+      ]
+    ]
+  },
+  "film": [
+    1920,
+    1080
+  ],
+  "scope": "Geometric existence of single-reflection paths through thin glazing to public lamps; not an image-error or energy-convergence measurement.",
+  "sources": [
+    {
+      "camera_samples_with_path": 15,
+      "source_center": [
+        -5.699999809265137,
+        -0.10000038146972656,
+        -24.299999237060547
+      ]
+    }
+  ]
+}
