@@ -360,20 +360,21 @@ pub fn draw_cached(
             action: Action::Scene(i),
         });
     }
-    canvas.line(left, 230, row_width, 0x353a3e);
-    canvas.text(left, 250, &state.status, ACCENT, 1);
+    let section_y = 110 + crate::scene::PRESET_NAMES.len() * 24;
+    canvas.line(left, section_y, row_width, 0x353a3e);
+    canvas.text(left, section_y + 20, &state.status, ACCENT, 1);
     if !state.finished {
         let activity_x = left + ((state.seconds * 35.0) as usize % row_width.max(1));
         canvas.line(
             activity_x,
-            265,
+            section_y + 35,
             6.min(left + row_width - activity_x),
             ACCENT,
         );
     }
     canvas.text(
         left,
-        277,
+        section_y + 47,
         &format!("{:5.1}%", state.progress * 100.0),
         TEXT,
         3,
@@ -381,7 +382,7 @@ pub fn draw_cached(
     canvas.rect(
         Rect {
             x: left,
-            y: 312,
+            y: section_y + 82,
             width: row_width,
             height: 4,
         },
@@ -390,7 +391,7 @@ pub fn draw_cached(
     canvas.rect(
         Rect {
             x: left,
-            y: 312,
+            y: section_y + 82,
             width: (row_width as f32 * state.progress) as usize,
             height: 4,
         },
@@ -420,11 +421,11 @@ pub fn draw_cached(
         ("BVH NODES", state.bvh_nodes.to_string()),
     ];
     for (i, (label, value)) in rows.iter().enumerate() {
-        let y = 338 + i * 39;
+        let y = section_y + 108 + i * 39;
         canvas.text(left, y, label, MUTED, 1);
         canvas.text(left, y + 15, value, TEXT, 2);
     }
-    let y = 626;
+    let y = section_y + 396;
     for (i, (label, action)) in [
         (
             if state.paused {
@@ -461,7 +462,7 @@ pub fn draw_cached(
     if !state.notice.is_empty() {
         canvas.text(
             left,
-            784,
+            section_y + 554,
             &state.notice.chars().take(28).collect::<String>(),
             ACCENT,
             1,

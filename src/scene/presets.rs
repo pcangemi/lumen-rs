@@ -1,17 +1,25 @@
 //! Built-in demonstration scenes; bundled assets require no runtime downloads.
 use super::*;
 
-pub const PRESET_NAMES: [&str; 5] = ["studio", "interior", "interior-night", "outdoor", "clouds"];
+pub const PRESET_NAMES: [&str; 6] = [
+    "studio",
+    "interior",
+    "interior-night",
+    "interior-neon",
+    "outdoor",
+    "clouds",
+];
 
 pub fn preset(name: &str, aspect: f32) -> Result<Scene> {
     let mut s = match name {
         "studio" => studio(aspect)?,
         "interior" => super::apartment::build(aspect, super::apartment::Lighting::Day)?,
         "interior-night" => super::apartment::build(aspect, super::apartment::Lighting::Night)?,
+        "interior-neon" => super::apartment::build(aspect, super::apartment::Lighting::NightNeon)?,
         "outdoor" => outdoor(aspect)?,
         "clouds" => clouds(aspect)?,
         _ => bail!(
-            "Unknown scene: {name}. Choose studio, interior, interior-night, outdoor, or clouds"
+            "Unknown scene: {name}. Choose studio, interior, interior-night, interior-neon, outdoor, or clouds"
         ),
     };
     s.finish()?;

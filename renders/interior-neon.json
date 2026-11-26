@@ -1,0 +1,29 @@
+{
+  "backend": "metal",
+  "device": "Apple M1 Pro",
+  "width": 1920,
+  "height": 1080,
+  "requested_spp": 64,
+  "average_spp": 64.0,
+  "max_depth": 50,
+  "seed": 42,
+  "adaptive_threshold": 0.0,
+  "render_seconds": 315.254436375,
+  "camera_samples_per_second": 420962.8309310735,
+  "primitives": 2190074,
+  "bvh_nodes": 1316743,
+  "bvh_depth": 31,
+  "texture_count": 43,
+  "scene_data_bytes": 1110690768,
+  "invalid_samples": 0,
+  "denoiser": "Open Image Denoise 2.x / CPU / high",
+  "denoise_seconds": 7.643327708,
+  "gpu_dispatch": {
+    "command_count": 8640,
+    "gpu_seconds": 306.7279939180589,
+    "max_command_seconds": 0.08279295836109668,
+    "max_samples_per_command": 1,
+    "threads_per_threadgroup": 128,
+    "tile_size": 128
+  }
+}

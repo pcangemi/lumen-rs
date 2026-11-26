@@ -117,11 +117,11 @@ pub(super) fn curtain(scene: &mut Scene, start: f32, width: f32, material: usize
     tube(scene, &hem, 0.003, material, 6);
 }
 
-pub(super) fn lamps(scene: &mut Scene, root: &Path, night: bool) -> Result<()> {
+pub(super) fn lamps(scene: &mut Scene, root: &Path, night: bool, pendant: Vec3) -> Result<()> {
     let first = scene.materials.len();
     scene.import_obj(
         &root.join("models/rattan_pendant/rattan_pendant.obj"),
-        Vec3::new(0.2, 2.174, -1.35),
+        pendant,
         1.8,
         0.0,
         None,
@@ -131,11 +131,11 @@ pub(super) fn lamps(scene: &mut Scene, root: &Path, night: bool) -> Result<()> {
     scene
         .primitives
         .retain(|primitive| primitive.info[1] as usize != first + 4);
-    rattan_weave(scene, Vec3::new(0.2, 2.174, -1.35), 1.8);
+    rattan_weave(scene, pendant, 1.8);
     // Preserve the full 80 mm source bulb. Its thin glass envelope surrounds a
     // separate compact emitting element, which projects the cane's real shadows.
     const BULB_SCALE: f32 = 0.55;
-    let bulb_anchor = Vec3::new(0.2, 2.174 + 0.2214641 * 1.8, -1.35);
+    let bulb_anchor = pendant + Vec3::Y * (0.2214641 * 1.8);
     for primitive in &mut scene.primitives {
         if primitive.info[1] as usize == first + 3 {
             primitive.p0 = pack_vec3(
@@ -351,7 +351,7 @@ fn rattan_weave(scene: &mut Scene, origin: Vec3, scale: f32) {
 
 pub(super) fn canvas(scene: &mut Scene, root: &Path, frame: usize) -> Result<()> {
     // Use the same bounds as the large wall panel, centered in both directions.
-    let center = Vec3::new((-1.3 + 4.12) * 0.5, (1.4 + 3.29) * 0.5, -4.37);
+    let center = Vec3::new(SOFA_PANEL_CENTER, (1.4 + 3.29) * 0.5, -4.37);
     let height = 1.38;
     let width = height * 1920.0 / 1848.0;
     let canvas_texture = scene

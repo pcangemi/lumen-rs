@@ -3,6 +3,7 @@ mod atmosphere;
 mod details;
 mod exterior;
 mod joinery;
+mod neon;
 use super::*;
 use crate::geometry::{pack_vec3, unpack_vec3};
 use crate::rng::Rng;
@@ -12,11 +13,52 @@ use std::f32::consts::TAU;
 pub(super) enum Lighting {
     Day,
     Night,
+    NightNeon,
+}
+
+const SOFA_PANEL_LEFT: f32 = -1.3;
+const SOFA_PANEL_RIGHT: f32 = 4.12;
+const SOFA_PANEL_CENTER: f32 = (SOFA_PANEL_LEFT + SOFA_PANEL_RIGHT) * 0.5;
+
+/// Shared plan dimensions keep lighting, furniture and architecture on the same axes.
+#[derive(Clone, Copy)]
+struct Layout {
+    table_x: f32,
+    sofa_x: f32,
+    pendant: Vec3,
+    rug_center_x: f32,
+    rug_width: f32,
+}
+
+impl Layout {
+    fn new(lighting: Lighting) -> Self {
+        if lighting == Lighting::NightNeon {
+            Self {
+                table_x: SOFA_PANEL_CENTER,
+                sofa_x: SOFA_PANEL_CENTER,
+                pendant: Vec3::new(SOFA_PANEL_CENTER, 2.174, -1.8),
+                rug_center_x: SOFA_PANEL_CENTER,
+                rug_width: 4.4,
+            }
+        } else {
+            Self {
+                table_x: 0.5,
+                sofa_x: 1.05,
+                pendant: Vec3::new(0.2, 2.174, -1.35),
+                rug_center_x: 0.7,
+                rug_width: 5.4,
+            }
+        }
+    }
 }
 
 pub fn build(aspect: f32, lighting: Lighting) -> Result<Scene> {
-    let from = Vec3::new(3.05, 1.65, 4.1);
-    let target = Vec3::new(-0.2, 1.3, -2.0);
+    let layout = Layout::new(lighting);
+    let (from, target) = if lighting == Lighting::NightNeon {
+        (Vec3::new(-3.15, 1.60, 4.65), Vec3::new(1.25, 1.8, -1.5))
+    } else {
+        (Vec3::new(3.05, 1.65, 4.1), Vec3::new(-0.2, 1.3, -2.0))
+    };
     let mut scene = Scene::empty(Camera::new(
         from,
         target,
@@ -25,7 +67,7 @@ pub fn build(aspect: f32, lighting: Lighting) -> Result<Scene> {
         0.0,
         from.distance(target),
     ));
-    let night = lighting == Lighting::Night;
+    let night = lighting != Lighting::Day;
     scene.sky = if night {
         Vec3::new(0.002, 0.004, 0.012)
     } else {
@@ -114,7 +156,18 @@ pub fn build(aspect: f32, lighting: Lighting) -> Result<Scene> {
             Vec3::new(-4.4, 3.22, start),
             plaster,
         );
-        window(&mut scene, start, end, window_paint, brass, dark, glass);
+        window(
+            &mut scene,
+            start,
+            end,
+            window_paint,
+            brass,
+            dark,
+            joinery::Glazing {
+                material: glass,
+                antique: lighting == Lighting::NightNeon,
+            },
+        );
         details::window_surround(&mut scene, start, end, trim, brass);
         details::radiator(&mut scene, (start + end) * 0.5, radiator_paint, brass, dark);
         // The bunched cloth lies entirely outside the swept casement opening.
@@ -129,28 +182,29 @@ pub fn build(aspect: f32, lighting: Lighting) -> Result<Scene> {
     );
     exterior::build(&mut scene, plaster_texture, linen_texture, night);
 
-    mouldings(&mut scene, trim);
-    details::wool_rug(&mut scene, &asset_root)?;
-    details::imported_furniture(&mut scene, &asset_root)?;
+    mouldings(&mut scene, trim, lighting == Lighting::NightNeon);
+    details::wool_rug(&mut scene, &asset_root, layout)?;
+    details::imported_furniture(&mut scene, &asset_root, layout)?;
 
     details::apartment_decor(&mut scene, &asset_root, brass, night)?;
 
-    // Low circular table, layered books, and original ceramic vessel.
+    // Books follow the coffee table when the seating axis changes.
+    let table_offset = Vec3::X * (layout.table_x - 0.5);
     let paper = scene.add_material(Material::matte(Vec3::new(0.76, 0.73, 0.64)));
     let book = scene.add_material(Material::matte(Vec3::new(0.12, 0.18, 0.17)));
     scene.add_box(
-        Vec3::new(0.68, 0.554, -2.0),
-        Vec3::new(1.18, 0.572, -1.65),
+        Vec3::new(0.68, 0.554, -2.0) + table_offset,
+        Vec3::new(1.18, 0.572, -1.65) + table_offset,
         book,
     );
     scene.add_box(
-        Vec3::new(0.69, 0.572, -1.99),
-        Vec3::new(1.17, 0.617, -1.66),
+        Vec3::new(0.69, 0.572, -1.99) + table_offset,
+        Vec3::new(1.17, 0.617, -1.66) + table_offset,
         paper,
     );
     scene.add_box(
-        Vec3::new(0.68, 0.617, -2.0),
-        Vec3::new(1.18, 0.634, -1.65),
+        Vec3::new(0.68, 0.617, -2.0) + table_offset,
+        Vec3::new(1.18, 0.634, -1.65) + table_offset,
         book,
     );
     let ceramic = scene.add_material(Material {
@@ -166,7 +220,12 @@ pub fn build(aspect: f32, lighting: Lighting) -> Result<Scene> {
     )?;
 
     atmosphere::canvas(&mut scene, &asset_root, walnut)?;
-    atmosphere::lamps(&mut scene, &asset_root, night)?;
+    atmosphere::lamps(&mut scene, &asset_root, night, layout.pendant)?;
+    if lighting == Lighting::NightNeon {
+        // Close the wall behind the camera so the cornice follows all four walls.
+        scene.add_box(Vec3::new(-4.6, 0.0, 9.0), Vec3::new(4.7, 3.8, 9.2), plaster);
+        neon::build(&mut scene, trim);
+    }
     Ok(scene)
 }
 
@@ -238,7 +297,7 @@ fn parquet(scene: &mut Scene, texture: usize) {
     }
 }
 
-fn mouldings(scene: &mut Scene, material: usize) {
+fn mouldings(scene: &mut Scene, material: usize, indirect_cornice: bool) {
     // Layered cornice and skirting profiles run along the room's actual boundaries.
     for (height, thickness, projection) in [
         (0.025, 0.13, 0.045),
@@ -252,6 +311,9 @@ fn mouldings(scene: &mut Scene, material: usize) {
         (3.68, 0.08, 0.16),
         (3.76, 0.04, 0.21),
     ] {
+        if indirect_cornice && height > 3.3 {
+            continue;
+        }
         scene.add_box(
             Vec3::new(-4.4, height, -4.5),
             Vec3::new(4.5, height + thickness, -4.5 + projection),
@@ -270,11 +332,18 @@ fn mouldings(scene: &mut Scene, material: usize) {
             );
         }
     }
-    for (left, right) in [(-4.05, -1.65), (-1.3, 4.12)] {
+    for (left, right) in [(-4.05, -1.65), (SOFA_PANEL_LEFT, SOFA_PANEL_RIGHT)] {
         panel(scene, left, right, 0.32, 0.94, material);
     }
     panel(scene, -4.05, -1.65, 1.4, 3.29, material);
-    panel(scene, -1.3, 4.12, 1.4, 3.29, material);
+    panel(
+        scene,
+        SOFA_PANEL_LEFT,
+        SOFA_PANEL_RIGHT,
+        1.4,
+        3.29,
+        material,
+    );
 }
 fn panel(scene: &mut Scene, left: f32, right: f32, bottom: f32, top: f32, material: usize) {
     for (inset, width, depth) in [(0.0, 0.035, 0.026), (0.044, 0.014, 0.018)] {
@@ -297,7 +366,7 @@ fn window(
     trim: usize,
     brass: usize,
     iron: usize,
-    glass: usize,
+    glass: joinery::Glazing,
 ) {
     joinery::window(scene, start, end, trim, brass, iron, glass);
 }
@@ -381,7 +450,18 @@ mod tests {
     fn curtains_clear_open_casements_and_radiators_fit_below_sills() {
         let mut scene = Scene::empty(Camera::new(Vec3::Z * 6.0, Vec3::ZERO, 54.0, 1.5, 0.0, 6.0));
         for (start, end) in [(-3.7, -1.9), (-0.8, 1.0), (2.1, 3.9)] {
-            window(&mut scene, start, end, 0, 1, 2, 3);
+            window(
+                &mut scene,
+                start,
+                end,
+                0,
+                1,
+                2,
+                joinery::Glazing {
+                    material: 3,
+                    antique: false,
+                },
+            );
             let window_end = scene.primitives.len();
             folded_curtain(&mut scene, start - 0.48, 0.36, 4);
             folded_curtain(&mut scene, end + 0.12, 0.36, 4);

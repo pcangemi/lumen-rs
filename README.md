@@ -24,7 +24,7 @@ The viewer schedules real rendering tiles in center-first passes: 64 × 64 on CP
 
 | Control | Action |
 | --- | --- |
-| Scene buttons | Studio, interior, interior-night, outdoor or clouds |
+| Scene buttons | Studio, interior, interior-night, interior-neon, outdoor or clouds |
 | Space / Pause | Pause or resume between tiles |
 | D / Raw–Clean | Toggle the current accumulation and the last denoised complete pass |
 | R / Restart | Restart the scene |
@@ -109,6 +109,36 @@ The interior contains Hungarian-point parquet, white painted timber casements wi
 
 The lamps are existing generic source assets, not manufacturer-certified product replicas. Their emission is tuned for this scene, not calibrated in lumens. Wool loops use the opaque surface BRDF; dedicated fiber scattering and cloth simulation remain future work.
 
+### Neon apartment
+
+`interior-neon` keeps the same apartment and furnishings, with a camera shifted left to show the right-hand wall. Wall-mounted cornices run around the entire room perimeter. Recessed warm-white strips sit about 24 cm below the ceiling, behind a raised lip: the visible light is reflected from the ceiling, with no central ceiling frame. The pendant, coffee table, sofa and rug share the large wall panel's axis; the smaller rug retains the same wool-loop density and leaves a passage beside the sideboard.
+
+The white **Cangem'sss** sign is centred above the sideboard. Its 2.4 m wide original italic script, level baseline and sweeping underline take inspiration from Miami/Vice City lettering. It uses 15 mm glass jackets, separate luminous cores, raised crossovers, electrode sleeves, ceramic boots, metal clips, screws and wiring into a recessed service box. Wall spill, reflections, shadows and indirect illumination come from path tracing. The glass jacket uses the renderer's thin-shell Fresnel model; cylindrical wall refraction and dispersion are not simulated.
+
+The windows in this variant use closed glass panes with submillimeter waviness and slightly varying thickness. The two glass surfaces have different slopes to bend transmitted rays subtly. The daylight and original night presets retain their previous glazing and camera.
+
+```bash
+./target/release/viewer --backend metal --scene interior-neon --samples 2048 --bounces 50
+./target/release/lumen-rs --backend metal --scene interior-neon --samples 256 --bounces 50 \
+  --denoise --exr --output renders/interior-neon.png
+```
+
+![Warm cove lighting and white neon in the apartment](renders/interior-neon.png)
+
+The bundled image is a 1920 × 1080, 64-sample denoised preview with a 50-bounce limit. The command above uses 256 samples for a longer render. Raw PNG and linear EXR files are preserved locally.
+
+To inspect the same sign front-on at Full HD, with no change to its geometry or materials:
+
+```bash
+cargo run --release --example render_neon_detail -- 128
+```
+
+This writes `renders/neon-detail.png` and preserves the raw linear EXR and PNG alongside it.
+
+![Level white script neon and its mounting fittings](renders/neon-detail.png)
+
+The strips use a warm-white RGB tint; source intensity is scene-tuned rather than calibrated in lumens. No postprocessed glow is used to replace light transport. The cornice is an original profile informed by [Orac indirect-lighting guidance](https://www.oracdecor.com/en_ie/faq) and [NOËL & MARQUET installation principles](https://noel-marquet.be/en/faqs/cat4_indirect-lighting), not a manufacturer-certified product replica. Neon construction references include [Krypton Neon component diagrams](https://www.neonshop.com/Tech/specs.html). For the equivalent Blender workflow, see [rounded curve geometry](https://docs.blender.org/manual/en/4.3/modeling/curves/properties/geometry.html) and [Andrew Price's neon tutorial](https://www.blenderguru.com/posts/2019/neon).
+
 The opposite building has individually jointed stone courses, recessed window openings, molded white casements, slightly wavy reflective glazing, projecting sills, cornices, iron railings, shutters and downpipes. Separate rooms and gathered curtains sit behind the glass; some rooms are lit at night. The street lies 7.3 m below the apartment floor. Seven public lamps illuminate the surroundings from below the camera's view, and their reflections follow the same light transport as the interior lamps. The facade and street fittings are original procedural geometry.
 
 The courtyard includes a closed wavy water volume, stone coping, a timber pergola and modeled leaves. The clouds preset demonstrates a procedural scattering volume; it is not a weather simulation or a measured atmospheric model.
@@ -136,7 +166,7 @@ cargo test --locked --release --lib oidn_reduces_noise -- --ignored
 ./scripts/check-metal.sh
 ```
 
-The OIDN test requires the optional runtime. The Metal tests require an accessible GPU and check all five presets, CPU/GPU luminance agreement, finite samples, exact GPU batch invariance, partial offline tiles and adaptive stopping. Those tests are explicitly ignored in the standard suite; an ignored test is not a GPU validation.
+The OIDN test requires the optional runtime. The Metal tests require an accessible GPU and check all six presets, CPU/GPU luminance agreement, finite samples, exact GPU batch invariance, partial offline tiles and adaptive stopping. Those tests are explicitly ignored in the standard suite; an ignored test is not a GPU validation.
 
 ```bash
 ./target/release/viewer --headless-preview renders/viewer.png --scene interior --samples 128

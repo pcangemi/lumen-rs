@@ -20,7 +20,7 @@ The native window owns a separate linear image. A worker sends completed tile co
 | `rng` | Reproducible random streams and directional sampling |
 | `scene` | Scene assembly and OBJ/MTL import |
 | `scene/file` | JSON schema and validation |
-| `scene/presets`, `scene/apartment` | Studio, day/night apartment, courtyard and cloud demonstrations |
+| `scene/presets`, `scene/apartment` | Studio, day/night/neon apartment, courtyard and cloud demonstrations |
 | `scene/apartment/atmosphere` | Sourced lighting, rattan weave, curtains and canvas |
 | `scene/apartment/exterior` | Recessed masonry facade, glazed rooms and public street lighting |
 | `scene/water` | Closed displaced meshes with time-dependent waves |
@@ -75,6 +75,6 @@ Image textures include base color, tangent-space normals, roughness, metalness a
 
 The standard suite checks BVH traversal against brute force, parallel slab boundaries, surface interpolation, dielectric Fresnel and total internal reflection, approximate BRDF energy and reciprocity, constant-radiance transmission through clear glass, outward box winding, OBJ rendering, thread determinism, GPU record sizes, progressive/offline equivalence, cancellation, texture filtering, MTL-relative texture paths, water boundary orientation, Beer–Lambert slab transmission, phase-function sampling and volume transmittance.
 
-Native-window input requires a desktop session, and Metal execution requires an accessible GPU. The headless UI preview and shader compilation do not establish those runtime properties. The optional OIDN test checks noise reduction against a known constant field. The three ignored GPU tests cover all five presets, batch invariance, partial tiles and adaptive stopping on an accessible device.
+Native-window input requires a desktop session, and Metal execution requires an accessible GPU. The headless UI preview and shader compilation do not establish those runtime properties. The optional OIDN test checks noise reduction against a known constant field. The three ignored GPU tests cover all six presets, batch invariance, partial tiles and adaptive stopping on an accessible device.
 
 A dependency of the Metal binding (`block` 0.1.6) emits an upstream future-compatibility warning on the current Rust toolchain; project code passes Clippy without warnings.

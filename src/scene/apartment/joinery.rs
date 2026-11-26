@@ -2,6 +2,12 @@
 use super::*;
 use details::tube;
 
+#[derive(Clone, Copy)]
+pub(super) struct Glazing {
+    pub material: usize,
+    pub antique: bool,
+}
+
 pub(super) fn frame(
     scene: &mut Scene,
     origin: Vec3,
@@ -56,7 +62,7 @@ pub(super) fn window(
     paint: usize,
     brass: usize,
     iron: usize,
-    glass: usize,
+    glass: Glazing,
 ) {
     let x = -4.38;
     // Deep sill and timber lining, with eased exposed edges.
@@ -219,19 +225,34 @@ pub(super) fn window(
     atmosphere::balcony(scene, start, end, iron);
 }
 
-fn pane(scene: &mut Scene, x: f32, bottom: f32, top: f32, left: f32, right: f32, glass: usize) {
+fn pane(scene: &mut Scene, x: f32, bottom: f32, top: f32, left: f32, right: f32, glass: Glazing) {
     const COLUMNS: usize = 12;
     const ROWS: usize = 20;
+    let surface_x = |y: f32, z: f32, side: f32| {
+        let original = x + side * 0.003 + 0.00022 * (z * 11.0).sin() * (y * 4.7).sin();
+        if !glass.antique {
+            return original;
+        }
+        // Submillimeter rolling and unequal surface slopes produce subtle optical
+        // distortion. A parallel sheet would mostly shift the ray laterally.
+        original
+            + 0.00024 * (z * 7.1 + y * 2.3).sin()
+            + side * (0.00017 * (y * 8.7 - z * 3.9).sin() + 0.00009 * (z * 15.3 + y * 5.2).cos())
+    };
     let point = |u: f32, v: f32, side: f32| {
         let y = bottom + v * (top - bottom);
         let z = left + u * (right - left);
-        Vec3::new(
-            x + side * 0.003 + 0.00022 * (z * 11.0).sin() * (y * 4.7).sin(),
-            y,
-            z,
-        )
+        Vec3::new(surface_x(y, z, side), y, z)
     };
     let normal = |p: Vec3, side: f32| {
+        if glass.antique {
+            let step = 0.001;
+            let dy = (surface_x(p.y + step, p.z, side) - surface_x(p.y - step, p.z, side))
+                / (2.0 * step);
+            let dz = (surface_x(p.y, p.z + step, side) - surface_x(p.y, p.z - step, side))
+                / (2.0 * step);
+            return Vec3::new(1.0, -dy, -dz).normalize() * side;
+        }
         Vec3::new(
             1.0,
             -0.00022 * 4.7 * (p.z * 11.0).sin() * (p.y * 4.7).cos(),
@@ -261,7 +282,7 @@ fn pane(scene: &mut Scene, x: f32, bottom: f32, top: f32, left: f32, right: f32,
                         tri.map(|i| p[i]),
                         Some(tri.map(|i| normal(p[i], side))),
                         [Vec2::ZERO; 3],
-                        glass,
+                        glass.material,
                     ));
                 }
             }
@@ -295,7 +316,7 @@ fn pane(scene: &mut Scene, x: f32, bottom: f32, top: f32, left: f32, right: f32,
                         tri.map(|j| p[j]),
                         Some([outward; 3]),
                         [Vec2::ZERO; 3],
-                        glass,
+                        glass.material,
                     ));
                 }
             }
@@ -309,10 +330,82 @@ mod tests {
     use crate::geometry::Ray;
 
     #[test]
+    fn antique_glass_bends_transmitted_rays_without_large_distortion() {
+        let mut scene = Scene::empty(Camera::new(-Vec3::X, Vec3::ZERO, 45.0, 1.0, 0.0, 1.0));
+        let glass = scene.add_material(Material::glass(1.52, Vec3::ZERO));
+        pane(
+            &mut scene,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            1.0,
+            Glazing {
+                material: glass,
+                antique: true,
+            },
+        );
+        scene.finish().unwrap();
+        let refract = |direction: Vec3, normal: Vec3, eta: f32| {
+            let cosine = (-direction).dot(normal).clamp(0.0, 1.0);
+            let perpendicular = eta * (direction + cosine * normal);
+            (perpendicular - normal * (1.0 - perpendicular.length_squared()).sqrt()).normalize()
+        };
+        let mut maximum_bend = 0.0f32;
+        for (y, z) in [(0.27, 0.31), (0.53, 0.71), (0.79, 0.43)] {
+            let entry = scene
+                .intersect(
+                    Ray {
+                        origin: Vec3::new(-1.0, y, z),
+                        direction: Vec3::X,
+                    },
+                    2.0,
+                    false,
+                )
+                .unwrap();
+            assert!(entry.front);
+            let inside = refract(Vec3::X, entry.geometric, 1.0 / 1.52);
+            let exit = scene
+                .intersect(
+                    Ray {
+                        origin: crate::geometry::offset(entry.p, entry.geometric, inside),
+                        direction: inside,
+                    },
+                    0.01,
+                    false,
+                )
+                .unwrap();
+            assert!(!exit.front);
+            assert!((0.005..0.007).contains(&exit.t));
+            let transmitted = refract(inside, exit.geometric, 1.52);
+            maximum_bend = maximum_bend.max(transmitted.cross(Vec3::X).length());
+        }
+        assert!(
+            maximum_bend > 0.0002,
+            "Surface thickness variation must alter ray direction"
+        );
+        assert!(
+            maximum_bend < 0.015,
+            "Old glass should distort subtly, not behave like a lens"
+        );
+    }
+
+    #[test]
     fn wavy_glass_has_outward_entry_and_exit_boundaries() {
         let mut scene = Scene::empty(Camera::new(Vec3::X * 2.0, Vec3::ZERO, 45.0, 1.0, 0.0, 2.0));
         let glass = scene.add_material(Material::glass(1.52, Vec3::ZERO));
-        pane(&mut scene, 0.0, 0.0, 1.0, 0.0, 1.0, glass);
+        pane(
+            &mut scene,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            1.0,
+            Glazing {
+                material: glass,
+                antique: false,
+            },
+        );
         scene.finish().unwrap();
         for direction in [Vec3::X, -Vec3::X, Vec3::Y, -Vec3::Y, Vec3::Z, -Vec3::Z] {
             let center = Vec3::new(0.0, 0.5, 0.5);

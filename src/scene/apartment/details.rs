@@ -261,7 +261,8 @@ fn rug_pile_height(x: f32, z: f32, free_height: f32) -> f32 {
     0.003 + (free_height - 0.003) * blend
 }
 
-pub(super) fn wool_rug(scene: &mut Scene, asset_root: &Path) -> Result<()> {
+pub(super) fn wool_rug(scene: &mut Scene, asset_root: &Path, layout: Layout) -> Result<()> {
+    let left = layout.rug_center_x - layout.rug_width * 0.5;
     let color = scene
         .textures
         .load(&asset_root.join("textures/rug-color.jpg"))?;
@@ -305,22 +306,22 @@ pub(super) fn wool_rug(scene: &mut Scene, asset_root: &Path) -> Result<()> {
         .normalize()
     };
     let point = |u: f32, v: f32| {
-        let x = -2.0 + 5.4 * u;
+        let x = left + layout.rug_width * u;
         let z = -2.5 + 3.5 * v;
         Vec3::new(x, height(x, z), z)
     };
     // A coarse backing supports individually curved yarn loops above its surface.
-    const COLUMNS: usize = 270;
+    let columns = (layout.rug_width / 0.02).round() as usize;
     const ROWS: usize = 175;
-    for x in 0..COLUMNS {
+    for x in 0..columns {
         for z in 0..ROWS {
-            let u = x as f32 / COLUMNS as f32;
+            let u = x as f32 / columns as f32;
             let v = z as f32 / ROWS as f32;
             let points = [
                 point(u, v),
                 point(u, v + 1.0 / ROWS as f32),
-                point(u + 1.0 / COLUMNS as f32, v + 1.0 / ROWS as f32),
-                point(u + 1.0 / COLUMNS as f32, v),
+                point(u + 1.0 / columns as f32, v + 1.0 / ROWS as f32),
+                point(u + 1.0 / columns as f32, v),
             ];
             for tri in [[0, 1, 2], [0, 2, 3]] {
                 scene.primitives.push(Primitive::triangle(
@@ -344,11 +345,12 @@ pub(super) fn wool_rug(scene: &mut Scene, asset_root: &Path) -> Result<()> {
         })
         .collect();
     let mut rng = Rng::new(83, 0, 42);
-    for column in 0..300 {
+    for column in 0..(layout.rug_width / 0.01795).floor() as usize {
         for row in 0..194 {
-            let x = -1.994 + (column as f32 + rng.uniform() * 0.7) * 0.01795;
+            let x = left + 0.006 + (column as f32 + rng.uniform() * 0.7) * 0.01795;
             let z = -2.494 + (row as f32 + rng.uniform() * 0.7) * 0.01795;
-            let pile = rug_pile_height(x, z, 0.009 + rng.uniform() * 0.007);
+            let pile =
+                rug_pile_height(x - (layout.table_x - 0.5), z, 0.009 + rng.uniform() * 0.007);
             let angle = rng.uniform() * TAU;
             let direction = Vec3::new(angle.cos(), 0.0, angle.sin());
             let curl = Vec3::new(-direction.z, 0.0, direction.x);
@@ -372,8 +374,8 @@ pub(super) fn wool_rug(scene: &mut Scene, asset_root: &Path) -> Result<()> {
         }
     }
     scene.add_box(
-        Vec3::new(-2.0, 0.012, -2.5),
-        Vec3::new(3.4, 0.023, 1.0),
+        Vec3::new(left, 0.012, -2.5),
+        Vec3::new(left + layout.rug_width, 0.023, 1.0),
         edge,
     );
     tube(
@@ -392,7 +394,11 @@ pub(super) fn wool_rug(scene: &mut Scene, asset_root: &Path) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn imported_furniture(scene: &mut Scene, asset_root: &Path) -> Result<()> {
+pub(super) fn imported_furniture(
+    scene: &mut Scene,
+    asset_root: &Path,
+    layout: Layout,
+) -> Result<()> {
     for (name, position, scale, rotation) in [
         (
             "modern_arm_chair_01",
@@ -402,7 +408,7 @@ pub(super) fn imported_furniture(scene: &mut Scene, asset_root: &Path) -> Result
         ),
         (
             "modern_coffee_table_01",
-            Vec3::new(0.5, 0.036, -1.8),
+            Vec3::new(layout.table_x, 0.036, -1.8),
             1.33,
             90.0,
         ),
@@ -412,8 +418,18 @@ pub(super) fn imported_furniture(scene: &mut Scene, asset_root: &Path) -> Result
             1.0,
             -90.0,
         ),
-        ("tea_set_01", Vec3::new(0.15, 0.554, -1.92), 0.72, -15.0),
-        ("glam_velvet_sofa", Vec3::new(1.05, 0.012, -3.42), 1.25, 0.0),
+        (
+            "tea_set_01",
+            Vec3::new(layout.table_x - 0.35, 0.554, -1.92),
+            0.72,
+            -15.0,
+        ),
+        (
+            "glam_velvet_sofa",
+            Vec3::new(layout.sofa_x, 0.012, -3.42),
+            1.25,
+            0.0,
+        ),
     ] {
         scene.import_obj(
             &asset_root

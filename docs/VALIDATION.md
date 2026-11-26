@@ -7,7 +7,7 @@ Validated on 2026-11-26 with Apple M1 Pro, 10 CPU threads and Blender 5.3.0.
 - Rust formatting and Clippy with warnings denied: passed.
 - Standard release physics suite: 26 passed; three GPU tests are deliberately ignored in this suite.
 - Metal shader compilation: passed.
-- Metal runtime regressions on the M1 Pro: three passed, covering all five presets, finite samples, exact batch invariance, partial film edges and adaptive stopping.
+- Metal runtime regressions on the M1 Pro: three passed, covering all six presets, finite samples, exact batch invariance, partial film edges and adaptive stopping.
 - Viewer cache regressions: passed for changed pixels, exposure, resizing, raw/clean selection and live tile outlines. The optional worker test delivered the final denoised image before completion.
 - Night lighting regression: all three lamp emitters are active, the pendant retains its 80 mm bulb envelope, and daylight emitters are absent.
 - All seven public street lamps are active; any projected within the camera field of view are occluded from direct sight.
@@ -28,10 +28,25 @@ The standard suite also covers linear PBR maps, mirrored tangent frames, leaf op
 | Studio | 777.850 | 777.856 |
 | Interior | 668.218 | 666.081 |
 | Interior night | 223.591 | 224.750 |
+| Interior neon | 454.670 | 454.053 |
 | Outdoor | 845.823 | 845.540 |
 | Clouds | 1222.799 | 1222.799 |
 
 Mean luminance differs by less than 0.6% in this run. GPU results are exactly equal across requested batch limits and offline/progressive rendering, including adaptive command sizing. A separate 277 × 71 render checks non-divisible film edges and a 17-sample final partial pass. Statistical CPU/GPU agreement does not establish equality of every path.
+
+## Perimeter lighting and script neon
+
+The `interior-neon` preset adds wall-mounted LED cornices around all four walls, replacing the solid ceiling cornice only in this variant. The emitter channel is about 24 cm below the ceiling, with an opaque raised lip. Ray probes verify that every strip can illuminate the ceiling and is hidden from an eye position below it. No isolated central ceiling frame remains.
+
+The pendant, sofa, table and rug use the large wall panel's centre line. The 2.4 m neon sign is centred above the sideboard. Original italic centre lines retain a level baseline and underline endpoints; crossovers lift toward the room. Separate emitting cores, thin-shell Fresnel glass, electrode fittings, clips and connected wiring form the sign. The glass jacket does not model cylindrical refraction or dispersion. Source intensities are scene-tuned RGB values, not measured lumens.
+
+Nine library tests passed, including alignment, level lettering, finite neon geometry, glass transmission and real light visibility; the optional OIDN library test is excluded. The 26 standard physics tests and three native Metal regressions passed. In the 73 × 47 / 64-sample / eight-bounce check, the neon scene's CPU and Metal luminance sums differed by about 0.14%; Metal images were exactly equal across batching and offline/progressive submission. This validates transport consistency, not photographic fidelity or manufacturing accuracy.
+
+The antique panes have closed, nonparallel surfaces with submillimeter waviness. Tests verify outward entry/exit surfaces, approximately 6 mm thickness and small but nonzero changes in transmitted ray direction.
+
+`cargo run --release --example render_neon_detail -- 128` renders a front-on Full HD detail using the same scene and materials, preserving raw and denoised output. The close-up camera sits beyond the pendant envelope; no scene geometry is hidden for that view.
+
+The published room and sign-detail images are 1920 × 1080 previews at 64 samples per pixel, using 50 and 24 maximum interactions respectively. Open Image Denoise filters the displayed copies; raw PNG/EXR files are retained locally. The per-image JSON reports record the actual settings and timings. These exports overlapped interactive viewer work, so their timings are not controlled performance benchmarks. Both completed with zero invalid samples and no Metal command failure. The room preview recorded a longest GPU command of 82.79 ms; the sign detail recorded 107.77 ms. Each uses 2,190,074 primitives and 43 textures.
 
 ## Metal throughput with identical pixels
 
