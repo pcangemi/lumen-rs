@@ -111,11 +111,11 @@ The headless preview exercises UI drawing and tile integration; it does not veri
 Install Blender, then run from a normal Terminal session:
 
 ```bash
-python3 scripts/compare-cycles.py --backend metal --scene studio
+python3 scripts/compare-cycles.py --backend metal --scene studio --quick
 python3 scripts/compare-cycles.py --backend metal --scene interior --output renders/cycles-interior
 ```
 
-The script exports the assembled scene, renders independent high-sample references and repeated candidate images in each engine, and records linear RMSE, relative L2 error, high-percentile pixel error and process wall time. The report includes Blender version, device, settings and shader-mapping differences. Start with small dimensions to validate the pipeline. Read [the comparison protocol](docs/BENCHMARKING.md) before interpreting results.
+The script exports the assembled scene, renders independent high-sample references and repeated candidate images in each engine, and records linear RMSE, relative L2 error, high-percentile pixel error and process wall time. The report includes Blender version, device, settings and shader-mapping differences. Use `--quick` to validate the pipeline with smaller images and references. The first Cycles Metal run may compile shaders for several minutes; full reference runs can take much longer than previews. Read [the comparison protocol](docs/BENCHMARKING.md) before interpreting results.
 
 For transport-only Lumen measurements:
 

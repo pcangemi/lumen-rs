@@ -13,9 +13,30 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def execute(command, log):
     started = time.perf_counter()
+    print(f'Starting {log.stem}; log: {log}', flush=True)
     with log.open('w') as stream:
-        subprocess.run([str(x) for x in command], cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT, check=True)
-    return time.perf_counter() - started
+        process = subprocess.Popen([str(x) for x in command], cwd=ROOT,
+                                   stdout=stream, stderr=subprocess.STDOUT)
+        try:
+            while True:
+                try:
+                    code = process.wait(timeout=30)
+                    break
+                except subprocess.TimeoutExpired:
+                    print(f'{log.stem}: {time.perf_counter() - started:.0f} s elapsed', flush=True)
+        except KeyboardInterrupt:
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+            raise
+        if code:
+            raise RuntimeError(f'{log.stem} failed with exit code {code}; inspect {log}')
+    elapsed = time.perf_counter() - started
+    print(f'Finished {log.stem}: {elapsed:.2f} s', flush=True)
+    return elapsed
 
 
 def main():
@@ -28,14 +49,21 @@ def main():
     parser.add_argument('--samples', type=int, default=128)
     parser.add_argument('--reference-samples', type=int, default=2048)
     parser.add_argument('--repeats', type=int, default=3)
+    parser.add_argument('--quick', action='store_true', help='Use 320 x 213, 32 candidate samples, 256 reference samples and one repeat')
     parser.add_argument('--output', type=Path, default=ROOT / 'renders/cycles-comparison')
     args = parser.parse_args()
+    if args.quick:
+        args.width, args.height, args.samples, args.reference_samples, args.repeats = 320, 213, 32, 256, 1
     if args.repeats < 1 or args.samples < 1 or args.reference_samples <= args.samples:
         parser.error('Require repeats >= 1 and reference-samples > samples > 0')
     if not args.blender.is_file():
         parser.error('Blender executable not found; use --blender /path/to/Blender')
     args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=True)
+    print(f'Rendering {2 * (args.repeats + 1)} images: two {args.reference_samples}-sample references '
+          f'and {2 * args.repeats} {args.samples}-sample candidates.', flush=True)
+    print('The first Cycles Metal run may spend several minutes compiling shaders. '
+          'Use --quick for workflow validation.', flush=True)
     snapshot = args.output / 'snapshot'
     renderer = ROOT / 'target/release/lumen-rs'
     common = [renderer, '--scene', args.scene, '--width', args.width, '--height', args.height,

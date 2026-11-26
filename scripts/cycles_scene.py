@@ -182,6 +182,7 @@ def main():
     data = json.loads(args.snapshot.read_text())
     if data['schema'] != 1:
         raise ValueError('Unsupported snapshot schema')
+    print("Building exported scene", flush=True)
     scene = build(data, args.snapshot.parent)
     scene.cycles.samples = args.samples or data['samples']
     scene.cycles.seed = args.seed if args.seed is not None else data['seed']
@@ -207,6 +208,7 @@ def main():
         bpy.ops.wm.save_as_mainfile(filepath=str(args.output.with_suffix('.blend').resolve()))
     setup_seconds = time.perf_counter() - started
     started = time.perf_counter()
+    print(f"Starting Cycles on {devices}: {scene.cycles.samples} samples; first-run Metal shader compilation may take several minutes", flush=True)
     bpy.ops.render.render(write_still=True)
     report = {
         'engine': 'Cycles', 'blender_version': bpy.app.version_string, 'backend': args.backend,

@@ -6,7 +6,9 @@ The chosen target is clean final images against Blender Cycles on Apple M1 Pro, 
 
 Build release binaries, close competing render jobs, connect power and use the same power mode. Run `scripts/compare-cycles.py` from a normal Terminal session so both engines can enumerate Metal. The script fails rather than silently substituting CPU for a requested GPU.
 
-The default run uses 640 × 426, 128 candidate samples, 2048 reference samples, 12 bounces and three measured candidate runs. Reference seed 1701 is independent of candidate seeds. Each engine is compared against its own reference because the shader models are not identical. Increase reference samples until independent reference images agree substantially better than the candidate error target. A high sample count alone does not establish a ground truth.
+For a first validation, use `--quick`: 320 × 213, 32 candidate samples, 256 reference samples and one repeat. The first Cycles Metal run may still spend several minutes compiling shaders. Each subprocess reports its stage, log path and elapsed time every 30 seconds.
+
+The default full run uses 640 × 426, 128 candidate samples, 2048 reference samples, 12 bounces and three measured candidate runs. Reference seed 1701 is independent of candidate seeds. Each engine is compared against its own reference because the shader models are not identical. Increase reference samples until independent reference images agree substantially better than the candidate error target. A high sample count alone does not establish a ground truth.
 
 ```bash
 python3 scripts/compare-cycles.py --backend metal --scene interior \
@@ -47,3 +49,7 @@ The snapshot records these limitations. An automated report is evidence of a rep
 Metrics operate on linear pixels without fitting exposure. The preview applies Lumen's display curve, making visual checks consistent. Use EXR inputs; display PNG error is not radiometric error.
 
 Blender's [light-path documentation](https://docs.blender.org/manual/en/latest/render/cycles/render_settings/light_paths.html) describes why ordinary path tracing can struggle with caustics. This is one of the cases to test explicitly before choosing a specialized integrator.
+
+## Recorded baseline
+
+The [M1 Pro interior run](VALIDATION.md) completed with three measured candidates per engine. Cycles had both lower total time and lower raw error at that single setting. The report is retained to guide optimization, not as an equal-quality ranking.
