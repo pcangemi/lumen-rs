@@ -1,0 +1,238 @@
+{
+  "measurements": [
+    {
+      "all_lights_normal_view_radiance": {
+        "depth_12": [
+          0.06253873556852341,
+          0.029988789930939674,
+          0.011328226886689663
+        ],
+        "depth_50": [
+          0.06264758855104446,
+          0.03001094050705433,
+          0.011331003159284592
+        ],
+        "paired_difference_standard_error": 3.6054801540719544e-05,
+        "paired_luminance_difference": 3.9185265734431616e-05
+      },
+      "direct_irradiance_scene_units": [
+        0.21034972369670868,
+        0.13731150329113007,
+        0.06894790381193161
+      ],
+      "fraction_after_glass_and_occlusion": 0.7345273494720459,
+      "location": "Rug below pendant",
+      "position": [
+        0.20000000298023224,
+        0.10999999940395355,
+        -1.350000023841858
+      ],
+      "unobstructed_irradiance_scene_units": [
+        0.2863740622997284,
+        0.18693865835666656,
+        0.09386707097291946
+      ]
+    },
+    {
+      "all_lights_normal_view_radiance": {
+        "depth_12": [
+          0.08713971078395844,
+          0.03962726145982742,
+          0.014110011048614979
+        ],
+        "depth_50": [
+          0.08721829950809479,
+          0.03964874520897865,
+          0.01411380060017109
+        ],
+        "paired_difference_standard_error": 1.910511441909468e-05,
+        "paired_luminance_difference": 3.2344452989718877e-05
+      },
+      "direct_irradiance_scene_units": [
+        0.20773735642433167,
+        0.13560649752616882,
+        0.06809177994728088
+      ],
+      "fraction_after_glass_and_occlusion": 0.7952808141708374,
+      "location": "Rug in front of table",
+      "position": [
+        0.5,
+        0.10999999940395355,
+        -0.800000011920929
+      ],
+      "unobstructed_irradiance_scene_units": [
+        0.2612128257751465,
+        0.17051391303539276,
+        0.08561971783638
+      ]
+    },
+    {
+      "all_lights_normal_view_radiance": {
+        "depth_12": [
+          0.04904220625758171,
+          0.02229548990726471,
+          0.007780677638947964
+        ],
+        "depth_50": [
+          0.04910741746425629,
+          0.022304464131593704,
+          0.007781656458973885
+        ],
+        "paired_difference_standard_error": 1.295759183131092e-05,
+        "paired_luminance_difference": 2.035309606185359e-05
+      },
+      "direct_irradiance_scene_units": [
+        0.0412452258169651,
+        0.026923950761556625,
+        0.01351926475763321
+      ],
+      "fraction_after_glass_and_occlusion": 0.3293443024158478,
+      "location": "Rug foreground",
+      "position": [
+        1.0,
+        0.10999999940395355,
+        0.6000000238418579
+      ],
+      "unobstructed_irradiance_scene_units": [
+        0.12523429095745087,
+        0.08175019174814224,
+        0.04104899987578392
+      ]
+    },
+    {
+      "all_lights_normal_view_radiance": {
+        "depth_12": [
+          0.03933956101536751,
+          0.01963268779218197,
+          0.00868165958672762
+        ],
+        "depth_50": [
+          0.03935059905052185,
+          0.019636230543255806,
+          0.00868275947868824
+        ],
+        "paired_difference_standard_error": 3.2541518235903175e-06,
+        "paired_luminance_difference": 4.960422268052142e-06
+      },
+      "direct_irradiance_scene_units": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "fraction_after_glass_and_occlusion": 0.0,
+      "location": "Under coffee table",
+      "position": [
+        0.5,
+        0.10999999940395355,
+        -1.7999999523162842
+      ],
+      "unobstructed_irradiance_scene_units": [
+        0.2669365108013153,
+        0.17425012588500977,
+        0.08749597519636154
+      ]
+    },
+    {
+      "all_lights_normal_view_radiance": {
+        "depth_12": [
+          0.008757045492529869,
+          0.003474198514595628,
+          0.001510975300334394
+        ],
+        "depth_50": [
+          0.008771575056016445,
+          0.0034853462129831314,
+          0.0015168731333687901
+        ],
+        "paired_difference_standard_error": 8.602223420824601e-06,
+        "paired_luminance_difference": 1.1487690400713284e-05
+      },
+      "direct_irradiance_scene_units": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "fraction_after_glass_and_occlusion": 0.0,
+      "location": "Left parquet",
+      "position": [
+        -3.0,
+        0.029999999329447746,
+        -1.0
+      ],
+      "unobstructed_irradiance_scene_units": [
+        0.06343480199575424,
+        0.041408855468034744,
+        0.0207925233989954
+      ]
+    },
+    {
+      "all_lights_normal_view_radiance": {
+        "depth_12": [
+          0.016108985990285873,
+          0.005628674756735563,
+          0.0015825717709958553
+        ],
+        "depth_50": [
+          0.016127100214362144,
+          0.00563157070428133,
+          0.0015829310286790133
+        ],
+        "paired_difference_standard_error": 4.6320461686897834e-06,
+        "paired_luminance_difference": 5.948564705704482e-06
+      },
+      "direct_irradiance_scene_units": [
+        0.00444039236754179,
+        0.0028985897079110146,
+        0.0014554614899680018
+      ],
+      "fraction_after_glass_and_occlusion": 0.06366727501153946,
+      "location": "Foreground parquet",
+      "position": [
+        0.20000000298023224,
+        0.029999999329447746,
+        1.7000000476837158
+      ],
+      "unobstructed_irradiance_scene_units": [
+        0.06974370032548904,
+        0.04552715644240379,
+        0.022860465571284294
+      ]
+    },
+    {
+      "all_lights_normal_view_radiance": {
+        "depth_12": [
+          0.1280043125152588,
+          0.07282331585884094,
+          0.0340692438185215
+        ],
+        "depth_50": [
+          0.14042605459690094,
+          0.0795639306306839,
+          0.036064598709344864
+        ],
+        "paired_difference_standard_error": 0.007584470528300612,
+        "paired_luminance_difference": 0.007605779963597579
+      },
+      "direct_irradiance_scene_units": [
+        0.1162092462182045,
+        0.07585882395505905,
+        0.038090780377388
+      ],
+      "fraction_after_glass_and_occlusion": 0.23877304792404175,
+      "location": "Ceiling beside pendant",
+      "position": [
+        1.2000000476837158,
+        3.7899999618530273,
+        -0.8500000238418579
+      ],
+      "unobstructed_irradiance_scene_units": [
+        0.4866936206817627,
+        0.3177025020122528,
+        0.1595272421836853
+      ]
+    }
+  ],
+  "path_depth_scope": "Normal-view surface radiance from all lights and indirect transport, paired at 12 and 50 interactions; independent of camera exposure and denoising. Neither depth is an infinite-depth reference.",
+  "samples_per_patch": 4096,
+  "scope": "Direct pendant irradiance over 8 cm radius patches above surfaces; excludes indirect light and surface BRDF. Values are scene units, not calibrated lux."
+}
