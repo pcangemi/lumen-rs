@@ -115,7 +115,14 @@ fn start(args: &Args) -> Job {
             let _ = sender.send(Event::Started {
                 backend: if metal { "Metal GPU" } else { "CPU / Rayon" }.into(),
                 device: if metal {
-                    device.unwrap_or_else(|| "Metal unavailable".into())
+                    #[cfg(target_os = "macos")]
+                    {
+                        device.unwrap_or_else(|| "Metal unavailable".into())
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        "Metal unavailable".into()
+                    }
                 } else {
                     format!("{} CPU threads", rayon::current_num_threads())
                 },
