@@ -230,7 +230,7 @@ fn gpu_records_have_exact_msl_layout() {
 #[test]
 #[ignore = "requires a Metal GPU accessible to the test process"]
 fn metal_matches_cpu_statistics_and_batching() {
-    for name in ["studio", "interior", "outdoor", "clouds"] {
+    for name in scene::PRESET_NAMES {
         let s = scene::preset(name, 1.5).unwrap();
         let cfg = RenderSettings {
             width: 73,
@@ -637,4 +637,65 @@ fn alpha_cutouts_reject_camera_and_shadow_hits_without_hiding_the_back_surface()
     );
     assert!(scene.intersect(ray(-0.5), 1.5, true).is_none());
     assert!(scene.intersect(ray(0.5), 1.5, true).is_some());
+}
+
+#[test]
+fn night_interior_uses_bulbs_without_daylight_emitters() {
+    let scene = scene::preset("interior-night", 16.0 / 9.0).unwrap();
+    assert!(scene.sky.max_element() < 0.02);
+    let mut pendant = false;
+    let mut arc_lamp = false;
+    for light in &scene.lights {
+        let primitive = &scene.primitives[light.primitive as usize];
+        let (lo, hi) = primitive.bounds();
+        let center = (lo + hi) * 0.5;
+        let power = Vec3::from_array(
+            scene.materials[primitive.info[1] as usize].emission[..3]
+                .try_into()
+                .unwrap(),
+        );
+        if center.x < -6.0 && center.y > 4.0 {
+            assert!(
+                power.max_element() <= 0.7,
+                "Daylight must not leak into the night preset"
+            );
+        }
+        pendant |=
+            (center - Vec3::new(0.2, 2.50, -1.35)).length() < 0.1 && power.max_element() > 100.0;
+        arc_lamp |= (center - Vec3::new(2.423, 1.777, -3.503)).length() < 0.1
+            && power.max_element() > 100.0;
+    }
+    assert!(
+        pendant && arc_lamp,
+        "Both sourced bulb meshes must illuminate the night scene"
+    );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "requires a Metal GPU accessible to the test process"]
+fn metal_offline_tiles_cover_odd_film_edges() {
+    let scene = scene::preset("studio", 277.0 / 71.0).unwrap();
+    let settings = RenderSettings {
+        width: 277,
+        height: 71,
+        samples: 17,
+        batch: 32,
+        max_depth: 5,
+        ..Default::default()
+    };
+    let offline = lumen_rs::metal_backend::render(&scene, settings).unwrap();
+    let progressive = lumen_rs::metal_backend::render_progressive(
+        &scene,
+        RenderSettings {
+            batch: 3,
+            ..settings
+        },
+        &Default::default(),
+        |_| {},
+    )
+    .unwrap();
+    assert!(offline.samples.iter().all(|&count| count == 17));
+    assert_eq!(offline.stats.invalid_samples, 0);
+    assert_eq!(offline.pixels, progressive.pixels);
 }

@@ -1,11 +1,18 @@
 //! Detailed apartment interior with cut parquet boards, joinery, mouldings and soft furnishings.
+mod atmosphere;
 mod details;
 use super::*;
 use crate::geometry::{pack_vec3, unpack_vec3};
 use crate::rng::Rng;
 use std::f32::consts::TAU;
 
-pub fn build(aspect: f32) -> Result<Scene> {
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Lighting {
+    Day,
+    Night,
+}
+
+pub fn build(aspect: f32, lighting: Lighting) -> Result<Scene> {
     let from = Vec3::new(3.05, 1.65, 4.1);
     let target = Vec3::new(-0.2, 1.3, -2.0);
     let mut scene = Scene::empty(Camera::new(
@@ -16,8 +23,17 @@ pub fn build(aspect: f32) -> Result<Scene> {
         0.0,
         from.distance(target),
     ));
-    scene.sky = Vec3::new(0.48, 0.62, 0.85);
-    scene.horizon = Vec3::new(0.75, 0.74, 0.69);
+    let night = lighting == Lighting::Night;
+    scene.sky = if night {
+        Vec3::new(0.002, 0.004, 0.012)
+    } else {
+        Vec3::new(0.48, 0.62, 0.85)
+    };
+    scene.horizon = if night {
+        Vec3::new(0.008, 0.012, 0.025)
+    } else {
+        Vec3::new(0.75, 0.74, 0.69)
+    };
     let asset_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
     let oak_texture = scene.textures.load(&asset_root.join("textures/oak.jpg"))?;
     let plaster_texture = scene
@@ -49,8 +65,8 @@ pub fn build(aspect: f32) -> Result<Scene> {
     });
     let curtain = scene.add_material(
         Material::matte(Vec3::new(0.89, 0.87, 0.80))
-            .textured(linen_texture, -2.0)
-            .texture_strength(0.15),
+            .textured(linen_texture, 3.0)
+            .texture_strength(0.3),
     );
     let glass = scene.add_material(Material::glass(1.52, Vec3::new(0.008, 0.003, 0.005)));
 
@@ -103,20 +119,7 @@ pub fn build(aspect: f32) -> Result<Scene> {
         Vec3::new(-4.4, 3.22, 9.0),
         plaster,
     );
-    let daylight = scene.add_material(Material::light(Vec3::new(6.0, 6.7, 8.0)));
-    scene.add_quad(
-        Vec3::new(-6.4, 0.1, -5.5),
-        Vec3::Z * 12.0,
-        Vec3::Y * 6.0,
-        daylight,
-    );
-    let sunlight = scene.add_material(Material::light(Vec3::new(80.0, 65.0, 46.0)));
-    scene.add_quad(
-        Vec3::new(-7.0, 3.8, 3.0),
-        Vec3::Y * 0.65,
-        Vec3::Z * 0.8,
-        sunlight,
-    );
+    atmosphere::exterior(&mut scene, night);
 
     mouldings(&mut scene, trim);
     details::wool_rug(&mut scene, &asset_root)?;
@@ -154,24 +157,8 @@ pub fn build(aspect: f32) -> Result<Scene> {
         Some(ceramic),
     )?;
 
-    // A framed abstract canvas sits within the upper wall moulding.
-    scene.add_box(
-        Vec3::new(0.0, 1.65, -4.46),
-        Vec3::new(2.45, 3.15, -4.36),
-        walnut,
-    );
-    scene.add_quad(
-        Vec3::new(0.055, 1.705, -4.345),
-        Vec3::X * 2.34,
-        Vec3::Y * 1.39,
-        paper,
-    );
-    let ink = scene.add_material(Material::matte(Vec3::new(0.15, 0.19, 0.15)));
-    let clay = scene.add_material(Material::matte(Vec3::new(0.40, 0.23, 0.13)));
-    ellipse(&mut scene, Vec3::new(0.9, 2.3, -4.34), 0.57, 0.48, ink);
-    ellipse(&mut scene, Vec3::new(1.68, 2.58, -4.33), 0.4, 0.3, clay);
-
-    pendant(&mut scene, Vec3::new(0.4, 0.0, -1.65), trim, brass);
+    atmosphere::canvas(&mut scene, &asset_root, walnut)?;
+    atmosphere::lamps(&mut scene, &asset_root, night)?;
     Ok(scene)
 }
 
@@ -388,49 +375,13 @@ fn window(
             primitive.n2 = pack_vec3(rotation * unpack_vec3(primitive.n2), 0.0);
         }
     }
-    scene.add_box(
-        Vec3::new(-4.83, 1.03, start),
-        Vec3::new(-4.79, 1.07, end),
-        iron,
-    );
-    for i in 0..12 {
-        let z = start + (end - start) * i as f32 / 11.0;
-        scene.add_box(
-            Vec3::new(-4.82, 0.79, z - 0.009),
-            Vec3::new(-4.80, 1.03, z + 0.009),
-            iron,
-        );
-    }
+    atmosphere::balcony(scene, start, end, iron);
 }
+
 fn folded_curtain(scene: &mut Scene, start: f32, width: f32, material: usize) {
-    for column in 0..32 {
-        for row in 0..14 {
-            let point = |u: f32, v: f32| {
-                Vec3::new(
-                    -4.08 + 0.06 * (u * TAU * 5.0).sin() + 0.025 * (v * 3.0).sin(),
-                    3.47 - v * 3.435,
-                    start + u * width,
-                )
-            };
-            let u = column as f32 / 32.0;
-            let v = row as f32 / 14.0;
-            let points = [
-                point(u, v),
-                point(u + 1.0 / 32.0, v),
-                point(u + 1.0 / 32.0, v + 1.0 / 14.0),
-                point(u, v + 1.0 / 14.0),
-            ];
-            for indices in [[0, 1, 2], [0, 2, 3]] {
-                scene.primitives.push(Primitive::triangle(
-                    indices.map(|i| points[i]),
-                    None,
-                    [Vec2::ZERO; 3],
-                    material,
-                ));
-            }
-        }
-    }
+    atmosphere::curtain(scene, start, width, material);
 }
+
 fn cylinder(scene: &mut Scene, base: Vec3, radius: f32, height: f32, material: usize) {
     lathe(
         scene,
@@ -479,53 +430,28 @@ fn lathe_segments(
         }
     }
 }
-fn pendant(scene: &mut Scene, center: Vec3, trim: usize, brass: usize) {
-    cylinder(scene, center + Vec3::Y * 3.76, 0.22, 0.04, trim);
-    cylinder(scene, center + Vec3::Y * 3.72, 0.15, 0.04, trim);
-    details::pendant_cord(scene, center, brass);
-    lathe(
-        scene,
-        center,
-        &[
-            (0.0, 2.88),
-            (0.10, 2.88),
-            (0.20, 2.82),
-            (0.34, 2.69),
-            (0.49, 2.52),
-            (0.59, 2.43),
-            (0.59, 2.41),
-            (0.56, 2.42),
-            (0.46, 2.51),
-            (0.31, 2.68),
-            (0.17, 2.80),
-            (0.08, 2.84),
-            (0.0, 2.84),
-        ],
-        brass,
-    );
-    let diffuser = scene.add_material(Material::light(Vec3::new(3.0, 2.2, 1.35)));
-    cylinder(scene, center + Vec3::Y * 2.435, 0.43, 0.006, diffuser);
-}
-fn ellipse(scene: &mut Scene, center: Vec3, width: f32, height: f32, material: usize) {
-    for i in 0..64 {
-        let a = i as f32 * TAU / 64.0;
-        let b = (i + 1) as f32 * TAU / 64.0;
-        scene.primitives.push(Primitive::triangle(
-            [
-                center,
-                center + Vec3::new(width * a.cos(), height * a.sin(), 0.0),
-                center + Vec3::new(width * b.cos(), height * b.sin(), 0.0),
-            ],
-            None,
-            [Vec2::ZERO; 3],
-            material,
-        ));
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn canvas_is_centered_within_the_large_wall_panel() {
+        let mut scene = Scene::empty(Camera::new(Vec3::Z * 6.0, Vec3::ZERO, 54.0, 1.5, 0.0, 6.0));
+        let frame = scene.add_material(Material::matte(Vec3::splat(0.2)));
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
+        atmosphere::canvas(&mut scene, &root, frame).unwrap();
+        let (lo, hi) = scene.primitives.iter().fold(
+            (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY)),
+            |(lo, hi), primitive| {
+                let bounds = primitive.bounds();
+                (lo.min(bounds.0), hi.max(bounds.1))
+            },
+        );
+        let center = (lo + hi) * 0.5;
+        assert!((center.x - 1.41).abs() < 0.001);
+        assert!((center.y - 2.345).abs() < 0.001);
+        assert!(lo.y > 1.4 && hi.y < 3.29);
+    }
 
     #[test]
     fn curtains_clear_open_casements_and_radiators_fit_below_sills() {

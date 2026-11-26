@@ -54,4 +54,4 @@ Blender's [light-path documentation](https://docs.blender.org/manual/en/latest/r
 
 The archived [M1 Pro interior run](VALIDATION.md), using the earlier 55,438-primitive scene, completed with three measured candidates per engine. Cycles had both lower total time and lower raw error at that single setting. The report is retained to guide optimization, not as an equal-quality ranking.
 
-The current interior uses different geometry, materials and framing, including imported furniture, masked foliage and a displaced rug. The archived comparison does not describe its performance. Rebuild and regenerate both snapshots and references before measuring the updated scene.
+The current interior uses different geometry, materials and framing, including imported furniture, masked foliage, 58,200 individual rug loops and an interlaced rattan shade. Its roughly 2.69 million primitives are substantially more expensive than the archived scene. The daylight and night preview timings are development measurements, not a new Cycles comparison. Rebuild and regenerate both snapshots and references before measuring either updated scene.

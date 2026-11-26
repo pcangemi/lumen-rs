@@ -1,13 +1,18 @@
 //! Built-in demonstration scenes; bundled assets require no runtime downloads.
 use super::*;
 
+pub const PRESET_NAMES: [&str; 5] = ["studio", "interior", "interior-night", "outdoor", "clouds"];
+
 pub fn preset(name: &str, aspect: f32) -> Result<Scene> {
     let mut s = match name {
         "studio" => studio(aspect)?,
-        "interior" => interior(aspect)?,
+        "interior" => super::apartment::build(aspect, super::apartment::Lighting::Day)?,
+        "interior-night" => super::apartment::build(aspect, super::apartment::Lighting::Night)?,
         "outdoor" => outdoor(aspect)?,
         "clouds" => clouds(aspect)?,
-        _ => bail!("Unknown scene: {name}. Choose studio, interior, outdoor, or clouds"),
+        _ => bail!(
+            "Unknown scene: {name}. Choose studio, interior, interior-night, outdoor, or clouds"
+        ),
     };
     s.finish()?;
     Ok(s)
@@ -85,9 +90,6 @@ fn studio(aspect: f32) -> Result<Scene> {
         strip,
     );
     Ok(s)
-}
-fn interior(aspect: f32) -> Result<Scene> {
-    super::apartment::build(aspect)
 }
 fn outdoor(aspect: f32) -> Result<Scene> {
     let from = Vec3::new(8.5, 4.8, 11.5);

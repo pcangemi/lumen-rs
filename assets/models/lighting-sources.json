@@ -1,0 +1,16 @@
+[
+  {
+    "name": "rattan_pendant",
+    "source": "https://vinish.dev/free-3d-models/ceiling-lights-and-chandeliers",
+    "url": "https://vinish-models.pages.dev/ceiling-lights-and-chandeliers/rattan-pendant-light.glb",
+    "license": "CC-BY-4.0",
+    "sha256": "6c027bc5c972210a846773789b591def898e667a27e78c3b62034b072f602cde"
+  },
+  {
+    "name": "arc_floor_lamp",
+    "source": "https://tevy.dev/models/floor-lamp",
+    "url": "https://tevy.dev/models/floor-lamp/v1/lod0.glb",
+    "license": "CC0-1.0",
+    "sha256": "ab814d4f270d6aa36ad02290ad0fab77a89f4279dc36dd71b7f7f120f01989ea"
+  }
+]

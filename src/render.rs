@@ -65,6 +65,14 @@ impl RenderSettings {
     }
 }
 #[derive(Serialize, Debug)]
+pub struct GpuDispatchStats {
+    pub command_count: u64,
+    pub gpu_seconds: f64,
+    pub max_command_seconds: f64,
+    pub max_samples_per_command: u32,
+}
+
+#[derive(Serialize, Debug)]
 pub struct RenderStats {
     pub backend: String,
     pub device: String,
@@ -86,6 +94,8 @@ pub struct RenderStats {
     pub invalid_samples: u64,
     pub denoiser: Option<String>,
     pub denoise_seconds: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu_dispatch: Option<GpuDispatchStats>,
 }
 pub struct RenderOutput {
     pub pixels: Vec<Vec3>,
@@ -186,5 +196,6 @@ pub fn stats(
         invalid_samples,
         denoiser: None,
         denoise_seconds: 0.0,
+        gpu_dispatch: None,
     }
 }

@@ -470,7 +470,7 @@ fn main() -> Result<()> {
             }
             Some(Action::Restart | Action::Scene(_)) => {
                 if let Some(Action::Scene(index)) = action {
-                    args.scene = ["studio", "interior", "outdoor", "clouds"][index].into();
+                    args.scene = scene::PRESET_NAMES[index].into();
                     args.scene_file = None;
                 }
                 args.exposure = state.exposure;

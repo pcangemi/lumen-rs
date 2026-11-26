@@ -2,7 +2,7 @@
 use super::*;
 
 /// A tube with smooth radial normals, used for piping, curtain rods and rug binding.
-fn tube(scene: &mut Scene, points: &[Vec3], radius: f32, material: usize, sides: usize) {
+pub(super) fn tube(scene: &mut Scene, points: &[Vec3], radius: f32, material: usize, sides: usize) {
     if points.len() < 2 {
         return;
     }
@@ -262,7 +262,7 @@ pub(super) fn wool_rug(scene: &mut Scene, asset_root: &Path) -> Result<()> {
     let mut displacement = crate::texture::TextureAtlas::default();
     let height_map = displacement.load_data(&asset_root.join("textures/rug-height.png"))?;
     let height =
-        |x: f32, z: f32| 0.025 + 0.025 * displacement.sample(height_map, Vec2::new(x, z) * 0.9).x;
+        |x: f32, z: f32| 0.022 + 0.009 * displacement.sample(height_map, Vec2::new(x, z) * 0.9).x;
     let normal = |x: f32, z: f32| {
         let step = 0.006;
         Vec3::new(
@@ -277,9 +277,9 @@ pub(super) fn wool_rug(scene: &mut Scene, asset_root: &Path) -> Result<()> {
         let z = -2.5 + 3.5 * v;
         Vec3::new(x, height(x, z), z)
     };
-    // Centimeter tessellation gives the pile real self-shadowing and a non-flat silhouette.
-    const COLUMNS: usize = 540;
-    const ROWS: usize = 350;
+    // A coarse backing supports individually curved yarn loops above its surface.
+    const COLUMNS: usize = 270;
+    const ROWS: usize = 175;
     for x in 0..COLUMNS {
         for z in 0..ROWS {
             let u = x as f32 / COLUMNS as f32;
@@ -300,9 +300,45 @@ pub(super) fn wool_rug(scene: &mut Scene, asset_root: &Path) -> Result<()> {
             }
         }
     }
+    let yarn: Vec<_> = (0..8)
+        .map(|i| {
+            scene.add_material(Material {
+                surface: [0.98, 0.0, 0.0, 1.5],
+                ..Material::matte(Vec3::new(0.73, 0.67, 0.56) * (0.88 + i as f32 * 0.025))
+            })
+        })
+        .collect();
+    let mut rng = Rng::new(83, 0, 42);
+    for column in 0..300 {
+        for row in 0..194 {
+            let x = -1.994 + (column as f32 + rng.uniform() * 0.7) * 0.01795;
+            let z = -2.494 + (row as f32 + rng.uniform() * 0.7) * 0.01795;
+            // Furniture contact patches compress the pile instead of letting it pierce the feet.
+            let under_table = (x - 0.5).abs() < 0.83 && (z + 1.8).abs() < 0.39;
+            let pile = if under_table {
+                0.003
+            } else {
+                0.022 + rng.uniform() * 0.028
+            };
+            let angle = rng.uniform() * TAU;
+            let direction = Vec3::new(angle.cos(), 0.0, angle.sin());
+            let curl = Vec3::new(-direction.z, 0.0, direction.x);
+            let root = Vec3::new(x, height(x, z) - 0.003, z);
+            let points: Vec<_> = (0..=4)
+                .map(|i| {
+                    let t = i as f32 / 4.0;
+                    root + direction * ((t - 0.5) * 0.009)
+                        + Vec3::Y * (pile * (t * std::f32::consts::PI).sin())
+                        + curl * (0.005 * (t * TAU).sin())
+                })
+                .collect();
+            let material = yarn[(rng.next_u32() as usize) % yarn.len()];
+            tube(scene, &points, 0.0014 + rng.uniform() * 0.0007, material, 4);
+        }
+    }
     scene.add_box(
         Vec3::new(-2.0, 0.012, -2.5),
-        Vec3::new(3.4, 0.027, 1.0),
+        Vec3::new(3.4, 0.023, 1.0),
         edge,
     );
     tube(
@@ -318,7 +354,7 @@ pub(super) fn wool_rug(scene: &mut Scene, asset_root: &Path) -> Result<()> {
         wool,
         12,
     );
-    // Short twisted tassels at the ends give a real textile silhouette without covering the rug in hair geometry.
+    // Loose end tassels continue the yarn silhouette beyond the woven backing.
     for side in [-1.0, 1.0] {
         for i in 0..270 {
             let x = -1.98 + i as f32 * 0.0199;
@@ -423,47 +459,4 @@ pub(super) fn apartment_decor(scene: &mut Scene, root: &Path, brass: usize) -> R
         None,
     )?;
     Ok(())
-}
-
-/// Braided textile cord and metal strain-relief collars, separate from the lamp shade.
-pub(super) fn pendant_cord(scene: &mut Scene, center: Vec3, brass: usize) {
-    let dark = scene.add_material(Material::matte(Vec3::new(0.032, 0.025, 0.018)));
-    let light = scene.add_material(Material::matte(Vec3::new(0.075, 0.060, 0.045)));
-    for strand in 0..4 {
-        let points: Vec<_> = (0..=720)
-            .map(|i| {
-                let t = i as f32 / 720.0;
-                let phase = t * TAU * 60.0 + strand as f32 * TAU / 4.0;
-                center
-                    + Vec3::new(
-                        0.004 * (t * std::f32::consts::PI).sin() + 0.0025 * phase.cos(),
-                        2.87 + t * 0.85,
-                        0.0025 * phase.sin(),
-                    )
-            })
-            .collect();
-        tube(
-            scene,
-            &points,
-            0.0012,
-            if strand % 2 == 0 { dark } else { light },
-            6,
-        );
-    }
-    for y in [2.855, 3.705] {
-        lathe_segments(
-            scene,
-            center + Vec3::Y * y,
-            &[
-                (0.0, 0.0),
-                (0.012, 0.0),
-                (0.012, 0.008),
-                (0.007, 0.012),
-                (0.007, 0.03),
-                (0.0, 0.03),
-            ],
-            brass,
-            32,
-        );
-    }
 }

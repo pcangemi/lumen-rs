@@ -297,21 +297,18 @@ pub fn draw(state: &ViewerState, width: usize, height: usize) -> (Vec<u32>, Vec<
     let row_width = sidebar_width.saturating_sub(40);
     canvas.text(left, 94, "SCENE", MUTED, 1);
     let mut buttons = Vec::new();
-    for (i, name) in ["studio", "interior", "outdoor", "clouds"]
-        .iter()
-        .enumerate()
-    {
+    for (i, name) in crate::scene::PRESET_NAMES.iter().enumerate() {
         let rect = Rect {
             x: left,
-            y: 110 + i * 30,
+            y: 110 + i * 24,
             width: row_width,
-            height: 24,
+            height: 20,
         };
         let selected = state.scene == *name;
         canvas.rect(rect, if selected { 0x334337 } else { 0x252b30 });
         canvas.text(
             left + 12,
-            rect.y + 10,
+            rect.y + 7,
             &name.to_uppercase(),
             if selected { ACCENT } else { TEXT },
             1,

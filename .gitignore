@@ -5,6 +5,8 @@
 !/renders/studio.json
 !/renders/interior.png
 !/renders/interior.json
+!/renders/interior-night.png
+!/renders/interior-night.json
 !/renders/outdoor.png
 !/renders/outdoor.json
 !/renders/clouds.png
@@ -12,3 +14,5 @@
 !/renders/viewer.png
 !/renders/benchmark.json
 .DS_Store
+
+__pycache__/

@@ -4,7 +4,7 @@ mod file;
 mod presets;
 mod water;
 pub use file::load;
-pub use presets::preset;
+pub use presets::{PRESET_NAMES, preset};
 pub use water::Waves;
 
 use crate::{

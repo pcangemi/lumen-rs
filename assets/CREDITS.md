@@ -37,8 +37,24 @@ python3 scripts/fetch-interior-assets.py
 /Applications/Blender.app/Contents/MacOS/Blender --background --python scripts/prepare-interior-assets.py
 ```
 
-The lamp, braided pendant cord, curtain rods, window joinery, radiator sections and rug edge are original procedural project geometry. The Poly Haven furniture remains CC0; the project license covers only its original contributions.
+The cabinet's table lamp, curtain rods, window joinery, radiator sections and rug edge are original procedural project geometry. The pendant and arc lamp sources are credited below. The Poly Haven furniture remains CC0; the project license covers only its original contributions.
 
 The plant is [Potted Plant 02](https://polyhaven.com/a/potted_plant_02) by Rico Cilliers (CC0), including its leaf color, normal, roughness and opacity maps. Opacity cutouts affect camera, indirect and shadow rays.
 
 The modern sofa is [GlamVelvetSofa](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/GlamVelvetSofa), by Eric Chadwick, copyright 2021 Wayfair, LLC, under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). See [its attribution and modification notice](models/glam_velvet_sofa/NOTICE.md). It is an existing product model with adapted cream upholstery; the renderer does not yet reproduce the original velvet sheen extension.
+
+## Day and night apartment
+
+- [Rattan Pendant Light](https://vinish.dev/free-3d-models/ceiling-lights-and-chandeliers) by vinish.dev, **CC BY 4.0**; [conversion notice](models/rattan_pendant/NOTICE.md). The source uses an opacity-masked weave. The apartment replaces that shell with physical interlaced strands following its radial profile; its original fittings and bulb are retained.
+- [Floor Lamp](https://tevy.dev/models/floor-lamp) by tevy.dev, **CC0 1.0**; [conversion notice](models/arc_floor_lamp/NOTICE.md). Both lamps retain their existing bulb meshes. SHA-256 hashes and download URLs are in `models/lighting-sources.json`.
+- Claude Monet, *Water Lilies* (1906), Art Institute of Chicago, accession 1933.1157. [Museum record](https://www.artic.edu/artworks/16568/water-lilies); [public-domain/CC0 reproduction on Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Claude_Monet_-_Water_Lilies_-_1933.1157_-_Art_Institute_of_Chicago.jpg). The image is mapped at its original aspect ratio onto a shallow canvas mesh, without repainting or generative changes.
+
+The irregular curtains, balcony scrollwork, frame and individual rug yarn loops
+are original project geometry. The loops are a surface approximation; they do
+not use a dedicated wool-fiber scattering model. Source material radiance is
+chosen for this scene and is not a certified photometric measurement.
+
+To restore the two lamp conversions, run Blender with
+`--background --python scripts/prepare-lighting-assets.py`. Set `KTX_TOOL` to the
+Khronos KTX-Software `ktx` executable to decode the arc lamp's source textures.
+The renderer uses the bundled conversions and needs neither Blender nor KTX at runtime.

@@ -1,0 +1,13 @@
+newmtl material_0
+Kd 1 0.949999988079071 0.8600000143051147
+Pr 0.30000001192092896
+Pm 0
+
+newmtl material_1
+Kd 1 1 1
+Pr 1
+Pm 1
+map_Kd 1-color.png
+norm 1-normal.png
+map_Pr 1-roughness.png
+map_Pm 1-metallic.png
