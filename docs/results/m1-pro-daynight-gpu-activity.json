@@ -1,0 +1,82 @@
+{
+  "device": "Apple M1 Pro",
+  "scene": "interior",
+  "width": 1920,
+  "height": 1080,
+  "requested_spp": 128,
+  "source": "macOS IORegistry AGXAccelerator PerformanceStatistics",
+  "scope": "System-wide GPU activity during the daylight development render; not process-exclusive utilization or a controlled benchmark.",
+  "samples": [
+    {
+      "time": 1795696306.022092,
+      "Tiler Utilization %": 99,
+      "recoveryCount": 0,
+      "Renderer Utilization %": 99,
+      "Device Utilization %": 99
+    },
+    {
+      "time": 1795696311.0507798,
+      "Tiler Utilization %": 100,
+      "recoveryCount": 0,
+      "Renderer Utilization %": 100,
+      "Device Utilization %": 100
+    },
+    {
+      "time": 1795696316.0795991,
+      "Tiler Utilization %": 100,
+      "recoveryCount": 0,
+      "Renderer Utilization %": 100,
+      "Device Utilization %": 100
+    },
+    {
+      "time": 1795696321.106729,
+      "Tiler Utilization %": 100,
+      "recoveryCount": 0,
+      "Renderer Utilization %": 100,
+      "Device Utilization %": 100
+    },
+    {
+      "time": 1795696326.136248,
+      "Tiler Utilization %": 92,
+      "recoveryCount": 0,
+      "Renderer Utilization %": 92,
+      "Device Utilization %": 99
+    },
+    {
+      "time": 1795696331.190891,
+      "Tiler Utilization %": 100,
+      "recoveryCount": 0,
+      "Renderer Utilization %": 100,
+      "Device Utilization %": 100
+    },
+    {
+      "time": 1795696336.215277,
+      "Tiler Utilization %": 100,
+      "recoveryCount": 0,
+      "Renderer Utilization %": 100,
+      "Device Utilization %": 100
+    },
+    {
+      "time": 1795696341.242769,
+      "Tiler Utilization %": 100,
+      "recoveryCount": 0,
+      "Renderer Utilization %": 100,
+      "Device Utilization %": 100
+    },
+    {
+      "time": 1795696346.266325,
+      "Tiler Utilization %": 100,
+      "recoveryCount": 0,
+      "Renderer Utilization %": 100,
+      "Device Utilization %": 100
+    },
+    {
+      "time": 1795696351.290857,
+      "Tiler Utilization %": 100,
+      "recoveryCount": 0,
+      "Renderer Utilization %": 100,
+      "Device Utilization %": 100
+    }
+  ],
+  "source_commit": "2825875f86c24e397a8b2b206151b8d02b8a2682"
+}

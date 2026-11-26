@@ -3,17 +3,17 @@
     {
       "all_lights_normal_view_radiance": {
         "depth_12": [
-          0.06253873556852341,
-          0.029988789930939674,
-          0.011328226886689663
+          0.0468265563249588,
+          0.023005345836281776,
+          0.008873391896486282
         ],
         "depth_50": [
-          0.06264758855104446,
-          0.03001094050705433,
-          0.011331003159284592
+          0.04683956503868103,
+          0.02300758846104145,
+          0.008874041959643364
         ],
-        "paired_difference_standard_error": 3.6054801540719544e-05,
-        "paired_luminance_difference": 3.9185265734431616e-05
+        "paired_difference_standard_error": 2.3545607795349187e-06,
+        "paired_luminance_difference": 4.419203094130356e-06
       },
       "direct_irradiance_scene_units": [
         0.21034972369670868,
@@ -36,17 +36,17 @@
     {
       "all_lights_normal_view_radiance": {
         "depth_12": [
-          0.08713971078395844,
-          0.03962726145982742,
-          0.014110011048614979
+          0.0912839025259018,
+          0.038438037037849426,
+          0.012506398372352123
         ],
         "depth_50": [
-          0.08721829950809479,
-          0.03964874520897865,
-          0.01411380060017109
+          0.0919853150844574,
+          0.03877261281013489,
+          0.012610764242708683
         ],
-        "paired_difference_standard_error": 1.910511441909468e-05,
-        "paired_luminance_difference": 3.2344452989718877e-05
+        "paired_difference_standard_error": 0.00038752966021883626,
+        "paired_luminance_difference": 0.00039594233373918504
       },
       "direct_irradiance_scene_units": [
         0.20773735642433167,
@@ -69,17 +69,17 @@
     {
       "all_lights_normal_view_radiance": {
         "depth_12": [
-          0.04904220625758171,
-          0.02229548990726471,
-          0.007780677638947964
+          0.034239694476127625,
+          0.015908408910036087,
+          0.006049480754882097
         ],
         "depth_50": [
-          0.04910741746425629,
-          0.022304464131593704,
-          0.007781656458973885
+          0.03425673022866249,
+          0.015925366431474686,
+          0.0060652089305222034
         ],
-        "paired_difference_standard_error": 1.295759183131092e-05,
-        "paired_luminance_difference": 2.035309606185359e-05
+        "paired_difference_standard_error": 1.2047450390875184e-05,
+        "paired_luminance_difference": 1.6885854790871266e-05
       },
       "direct_irradiance_scene_units": [
         0.0412452258169651,
@@ -102,17 +102,17 @@
     {
       "all_lights_normal_view_radiance": {
         "depth_12": [
-          0.03933956101536751,
-          0.01963268779218197,
-          0.00868165958672762
+          0.02593998610973358,
+          0.011891047470271587,
+          0.00443656463176012
         ],
         "depth_50": [
-          0.03935059905052185,
-          0.019636230543255806,
-          0.00868275947868824
+          0.02639373019337654,
+          0.011970536783337593,
+          0.004455017391592264
         ],
-        "paired_difference_standard_error": 3.2541518235903175e-06,
-        "paired_luminance_difference": 4.960422268052142e-06
+        "paired_difference_standard_error": 0.00014327951075169748,
+        "paired_luminance_difference": 0.00015464952144839106
       },
       "direct_irradiance_scene_units": [
         0.0,
@@ -135,17 +135,17 @@
     {
       "all_lights_normal_view_radiance": {
         "depth_12": [
-          0.008757045492529869,
-          0.003474198514595628,
-          0.001510975300334394
+          0.009609436616301537,
+          0.0035238685086369514,
+          0.0014837406342849135
         ],
         "depth_50": [
-          0.008771575056016445,
-          0.0034853462129831314,
-          0.0015168731333687901
+          0.009615910239517689,
+          0.003529537469148636,
+          0.0014881764072924852
         ],
-        "paired_difference_standard_error": 8.602223420824601e-06,
-        "paired_luminance_difference": 1.1487690400713284e-05
+        "paired_difference_standard_error": 3.845345515959544e-06,
+        "paired_luminance_difference": 5.750810885274411e-06
       },
       "direct_irradiance_scene_units": [
         0.0,
@@ -168,17 +168,17 @@
     {
       "all_lights_normal_view_radiance": {
         "depth_12": [
-          0.016108985990285873,
-          0.005628674756735563,
-          0.0015825717709958553
+          0.021688023582100868,
+          0.007850955240428448,
+          0.002112994436174631
         ],
         "depth_50": [
-          0.016127100214362144,
-          0.00563157070428133,
-          0.0015829310286790133
+          0.021693237125873566,
+          0.00785162765532732,
+          0.0021130540408194065
         ],
-        "paired_difference_standard_error": 4.6320461686897834e-06,
-        "paired_luminance_difference": 5.948564705704482e-06
+        "paired_difference_standard_error": 8.370695910978767e-07,
+        "paired_luminance_difference": 1.5937143587052567e-06
       },
       "direct_irradiance_scene_units": [
         0.00444039236754179,
@@ -201,17 +201,17 @@
     {
       "all_lights_normal_view_radiance": {
         "depth_12": [
-          0.1280043125152588,
-          0.07282331585884094,
-          0.0340692438185215
+          0.12513631582260132,
+          0.07360892742872238,
+          0.03511665016412735
         ],
         "depth_50": [
-          0.14042605459690094,
-          0.0795639306306839,
-          0.036064598709344864
+          0.12514424324035645,
+          0.07361350208520889,
+          0.03511948883533478
         ],
-        "paired_difference_standard_error": 0.007584470528300612,
-        "paired_luminance_difference": 0.007605779963597579
+        "paired_difference_standard_error": 2.1001367472042053e-06,
+        "paired_luminance_difference": 5.165489199043801e-06
       },
       "direct_irradiance_scene_units": [
         0.1162092462182045,
@@ -234,5 +234,6 @@
   ],
   "path_depth_scope": "Normal-view surface radiance from all lights and indirect transport, paired at 12 and 50 interactions; independent of camera exposure and denoising. Neither depth is an infinite-depth reference.",
   "samples_per_patch": 4096,
-  "scope": "Direct pendant irradiance over 8 cm radius patches above surfaces; excludes indirect light and surface BRDF. Values are scene units, not calibrated lux."
+  "scope": "Direct pendant irradiance over 8 cm radius patches above surfaces; excludes indirect light and surface BRDF. Values are scene units, not calibrated lux.",
+  "scene_source_commit": "397a067"
 }
