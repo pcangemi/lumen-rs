@@ -1,0 +1,36 @@
+{
+  "scope": "Deterministic pixel-equivalence and packed scene storage check; not a speed benchmark.",
+  "reference_source_commit": "397a067",
+  "measurements": [
+    {
+      "scene": "day",
+      "width": 73,
+      "height": 47,
+      "samples": 64,
+      "max_depth": 8,
+      "backend": "cpu",
+      "textures_before": 45,
+      "textures_after": 43,
+      "packed_bytes_before": 1317275488,
+      "packed_bytes_after": 1283688256,
+      "packed_bytes_saved": 33587232,
+      "linear_exr_bytes_identical": true,
+      "linear_exr_sha256": "cfaef42b4d040857fc043868325fc196cf2302ed1587c4921d36fb0397d3bb10"
+    },
+    {
+      "scene": "night",
+      "width": 73,
+      "height": 47,
+      "samples": 64,
+      "max_depth": 8,
+      "backend": "cpu",
+      "textures_before": 45,
+      "textures_after": 43,
+      "packed_bytes_before": 1317280176,
+      "packed_bytes_after": 1283692944,
+      "packed_bytes_saved": 33587232,
+      "linear_exr_bytes_identical": true,
+      "linear_exr_sha256": "e84860fe93b45c2f852117cb8040c72a74b6cd9c75fe3bcc0a58167e9f20cea7"
+    }
+  ]
+}

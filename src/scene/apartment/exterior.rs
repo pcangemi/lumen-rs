@@ -20,7 +20,7 @@ struct FacadeMaterials {
     room_lights: [usize; 2],
 }
 
-pub(super) fn build(scene: &mut Scene, root: &Path, night: bool) -> Result<()> {
+pub(super) fn build(scene: &mut Scene, plaster: usize, linen: usize, night: bool) {
     let sky = scene.add_material(Material::light(if night {
         Vec3::new(0.05, 0.09, 0.22)
     } else {
@@ -37,8 +37,6 @@ pub(super) fn build(scene: &mut Scene, root: &Path, night: bool) -> Result<()> {
         let sun = scene.add_material(Material::light(Vec3::new(140.0, 112.0, 77.0)));
         scene.add_quad(Vec3::new(-8.0, 5.0, 3.0), Vec3::Y * 0.7, Vec3::Z * 0.9, sun);
     }
-    let plaster = scene.textures.load(&root.join("textures/plaster.jpg"))?;
-    let linen = scene.textures.load(&root.join("textures/linen.jpg"))?;
     let materials = FacadeMaterials {
         stone: (0..7)
             .map(|i| {
@@ -156,7 +154,6 @@ pub(super) fn build(scene: &mut Scene, root: &Path, night: bool) -> Result<()> {
         slate,
     );
     street(scene, &materials, night);
-    Ok(())
 }
 
 fn masonry(scene: &mut Scene, bottom: f32, top: f32, left: f32, right: f32, m: &FacadeMaterials) {
