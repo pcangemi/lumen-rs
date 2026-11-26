@@ -62,13 +62,15 @@ The dense apartment exposed command-buffer failures, including a user-reported `
 
 The target is a heuristic, not a promise that future commands cannot exceed it. Reports include command count, total GPU command time, longest command and maximum samples per command. Error reports retain the driver message, tile and sample range. Failed commands are not retried because their writes may be incomplete. Native desktop responsiveness and competing GPU workloads still need interactive assessment.
 
+Six [IORegistry readings](results/m1-pro-boucle-gpu-activity.json) taken five seconds apart during the revised Full HD night render reported 92–97% GPU device utilization. These are system-wide counters, not exclusive process occupancy or proof of optimal kernel efficiency.
+
 Ten [IORegistry readings](results/m1-pro-daynight-gpu-activity.json) sampled five seconds apart during an earlier daylight run at commit `2825875` reported 99–100% GPU device utilization. These are system-wide counters, not exclusive utilization by this process or proof of optimal kernel efficiency.
 
 An interactive viewer was also running during that earlier daylight run. It completed 128 samples per pixel at Full HD with zero invalid samples in 718.65 seconds of transport and 3.51 seconds of filtering. Its 64,770 GPU commands took at most 32.33 ms each. This validates a shared-workload run of the scheduler; it is not an isolated throughput benchmark of the revised scene.
 
 ## Images
 
-The facade now reuses the apartment's plaster and linen texture handles. The [deterministic comparison](results/m1-pro-texture-reuse.json) records 45 → 43 atlas entries and 33,587,232 fewer packed scene bytes. Day and night linear EXR files are byte-for-byte identical before and after this change at 73 × 47, 64 samples and eight interactions on CPU. This checks pixel equivalence and storage, not a speedup. The archived Full HD exports below retain their measured settings and timings from `397a067`, before this allocation-only change and the boucle revision.
+The facade now reuses the apartment's plaster and linen texture handles. The [deterministic comparison](results/m1-pro-texture-reuse.json) records 45 → 43 atlas entries and 33,587,232 fewer packed scene bytes. Day and night linear EXR files are byte-for-byte identical before and after this change at 73 × 47, 64 samples and eight interactions on CPU. This checks pixel equivalence and storage, not a speedup. The current Full HD exports include both the shared atlas handles and the revised boucle geometry.
 
 The opposite facade contains stone courses, recessed glazed rooms, window profiles, sills, cornices, shutters, railings and downpipes. Seven street lamps sit on a street 7.3 m below the apartment floor. The night region study at 650 × 430 pixels and 128 samples completed with zero invalid samples in 143.69 seconds of transport, with a maximum GPU command time of 35.61 ms. An interactive viewer was also running, so this is a shared-workload observation.
 
@@ -84,14 +86,16 @@ The revised rug replaces the tall, narrow polygonal strands with 58,200 short bo
 
 The matching daylight and night apartment previews use 1920 × 1080, native Metal and Open Image Denoise. The daylight image uses 128 samples and the night image uses 256. Per-image JSON reports record actual settings, transport timings, denoising timings and dispatch measurements. The viewer snapshot reuses the finished daylight EXR through `examples/viewer_snapshot.rs`; it does not retrace the scene.
 
-The Full HD exports at source commit `397a067` completed with zero invalid samples and no Metal command failure. Both use a 12-interaction limit. These are development runs, not an isolated Cycles comparison.
+The Full HD exports at source commit `8c21a72` completed with zero invalid samples and no Metal command failure. Both use a 12-interaction limit. These are development runs, not an isolated Cycles comparison.
 
 | Scene | Samples per pixel | Transport | Denoising | Longest GPU command |
 | --- | ---: | ---: | ---: | ---: |
-| interior | 128 | 617.47 s | 3.41 s | 35.11 ms |
-| interior-night | 256 | 1729.23 s | 2.52 s | 73.20 ms |
+| interior | 128 | 457.23 s | 2.10 s | 35.06 ms |
+| interior-night | 256 | 954.42 s | 2.21 s | 29.61 ms |
 
-The earlier apartment previews contain about 3.24 million primitives, including 58,200 curved rug loops, physical interlaced rattan, source lamp fittings, an 80 mm clear bulb envelope, transmitting shades, white timber joinery, connected cables, irregular curtains, balcony scrollwork and a centered public-domain Monet canvas. The lamps are generic existing source models; their emission is scene-tuned rather than calibrated in lumens. Rug loops use the opaque surface BRDF, not a dedicated fiber-scattering model. The source sofa uses an adapted diffuse/GGX fabric material rather than its original velvet sheen shader. These are development previews, not a claim of photographic equivalence or a controlled performance comparison.
+The previous Full HD previews at `397a067` took 617.47 s by day and 1729.23 s by night. Geometry, materials and numerical behavior changed in the current revision; these observations are not a controlled equal-quality speed comparison.
+
+The current apartment contains about 1.82 million primitives, including 58,200 rounded rug loops, physical interlaced rattan, source lamp fittings, an 80 mm clear bulb envelope, transmitting shades, white timber joinery, connected cables, irregular curtains, balcony scrollwork and a centered public-domain Monet canvas. The lamps are generic existing source models; their emission is scene-tuned rather than calibrated in lumens. Rug loops use the opaque surface BRDF, not a dedicated fiber-scattering model. The source sofa uses an adapted diffuse/GGX fabric material rather than its original velvet sheen shader. These are development previews, not a claim of photographic equivalence or a controlled performance comparison.
 
 Studio and courtyard previews retain their earlier CPU renders at 900 × 600 and 256 samples. The cloud study uses 720 × 480, 256 samples and 24 bounces. Raw PNG and EXR files remain local; large raw outputs are excluded from Git.
 

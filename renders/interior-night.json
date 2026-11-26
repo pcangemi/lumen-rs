@@ -8,20 +8,20 @@
   "max_depth": 12,
   "seed": 42,
   "adaptive_threshold": 0.0,
-  "render_seconds": 1729.229079458,
-  "camera_samples_per_second": 306981.65229003906,
-  "primitives": 3241266,
-  "bvh_nodes": 1826667,
+  "render_seconds": 954.41720525,
+  "camera_samples_per_second": 556194.4997219024,
+  "primitives": 1818546,
+  "bvh_nodes": 1108345,
   "bvh_depth": 31,
-  "texture_count": 45,
-  "scene_data_bytes": 1317280176,
+  "texture_count": 43,
+  "scene_data_bytes": 1044341808,
   "invalid_samples": 0,
   "denoiser": "Open Image Denoise 2.x / CPU / high",
-  "denoise_seconds": 2.5190365420000003,
+  "denoise_seconds": 2.213842333,
   "gpu_dispatch": {
-    "command_count": 130560,
-    "gpu_seconds": 1658.5858598726336,
-    "max_command_seconds": 0.07319999998435378,
-    "max_samples_per_command": 1
+    "command_count": 122400,
+    "gpu_seconds": 861.7502696695738,
+    "max_command_seconds": 0.029611749981995672,
+    "max_samples_per_command": 2
   }
 }

@@ -71,5 +71,60 @@
     "closest_approach_false_occlusions": 0,
     "scope": "Comparison of old quadratic and current intersection against visible sampled endpoints; not a full-scene irradiance measurement.",
     "regression": "shadow_connections_do_not_hit_a_small_emitter_before_their_endpoint"
+  },
+  "source_commit": "8c21a72dcd49c9004997659d95db0600b969ebe4",
+  "full_hd_day": {
+    "backend": "metal",
+    "device": "Apple M1 Pro",
+    "width": 1920,
+    "height": 1080,
+    "requested_spp": 128,
+    "average_spp": 128.0,
+    "max_depth": 12,
+    "seed": 42,
+    "adaptive_threshold": 0.0,
+    "render_seconds": 457.232203708,
+    "camera_samples_per_second": 580494.5448888469,
+    "primitives": 1818548,
+    "bvh_nodes": 1108345,
+    "bvh_depth": 31,
+    "texture_count": 43,
+    "scene_data_bytes": 1044337120,
+    "invalid_samples": 0,
+    "denoiser": "Open Image Denoise 2.x / CPU / high",
+    "denoise_seconds": 2.095702334,
+    "gpu_dispatch": {
+      "command_count": 49470,
+      "gpu_seconds": 402.06182059284765,
+      "max_command_seconds": 0.03506233333609998,
+      "max_samples_per_command": 2
+    }
+  },
+  "full_hd_night": {
+    "backend": "metal",
+    "device": "Apple M1 Pro",
+    "width": 1920,
+    "height": 1080,
+    "requested_spp": 256,
+    "average_spp": 256.0,
+    "max_depth": 12,
+    "seed": 42,
+    "adaptive_threshold": 0.0,
+    "render_seconds": 954.41720525,
+    "camera_samples_per_second": 556194.4997219024,
+    "primitives": 1818546,
+    "bvh_nodes": 1108345,
+    "bvh_depth": 31,
+    "texture_count": 43,
+    "scene_data_bytes": 1044341808,
+    "invalid_samples": 0,
+    "denoiser": "Open Image Denoise 2.x / CPU / high",
+    "denoise_seconds": 2.213842333,
+    "gpu_dispatch": {
+      "command_count": 122400,
+      "gpu_seconds": 861.7502696695738,
+      "max_command_seconds": 0.029611749981995672,
+      "max_samples_per_command": 2
+    }
   }
 }

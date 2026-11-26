@@ -1,0 +1,55 @@
+{
+  "scope": "System-wide IORegistry counters during the Full HD night render; not exclusive process occupancy or proof of optimal kernel efficiency.",
+  "source_commit": "8c21a72dcd49c9004997659d95db0600b969ebe4",
+  "scene": "interior-night",
+  "observations": [
+    {
+      "utc": "2026-11-26T15:24:52.239994+00:00",
+      "utilization": {
+        "Device Utilization %": 94,
+        "Renderer Utilization %": 60,
+        "Tiler Utilization %": 60
+      }
+    },
+    {
+      "utc": "2026-11-26T15:24:57.293251+00:00",
+      "utilization": {
+        "Device Utilization %": 97,
+        "Renderer Utilization %": 57,
+        "Tiler Utilization %": 58
+      }
+    },
+    {
+      "utc": "2026-11-26T15:25:02.360248+00:00",
+      "utilization": {
+        "Device Utilization %": 94,
+        "Renderer Utilization %": 64,
+        "Tiler Utilization %": 64
+      }
+    },
+    {
+      "utc": "2026-11-26T15:25:07.430530+00:00",
+      "utilization": {
+        "Device Utilization %": 93,
+        "Renderer Utilization %": 52,
+        "Tiler Utilization %": 52
+      }
+    },
+    {
+      "utc": "2026-11-26T15:25:12.488579+00:00",
+      "utilization": {
+        "Device Utilization %": 94,
+        "Renderer Utilization %": 63,
+        "Tiler Utilization %": 64
+      }
+    },
+    {
+      "utc": "2026-11-26T15:25:17.545391+00:00",
+      "utilization": {
+        "Device Utilization %": 92,
+        "Renderer Utilization %": 58,
+        "Tiler Utilization %": 58
+      }
+    }
+  ]
+}
