@@ -69,3 +69,14 @@ shade. Both floor-level lamp leads connect to modeled wall outlets.
 The opposite masonry facade, recessed rooms, window glazing, shutters, railings,
 downpipes and public street luminaires are original procedural project geometry.
 They reuse the credited plaster and linen maps.
+
+## Glass guardian lion
+
+`models/guardian_lion/guardian_lion.obj` is adapted from
+[Chinese Guardian Lions](https://sketchfab.com/3d-models/chinese-guardian-lions-c981456846cc49f59cfa92553b7a7506)
+by **SolidXperts**, licensed **CC BY-NC 4.0**. It is not covered by the engine's
+MIT license. See the [attribution and modification notice](models/guardian_lion/NOTICE.md)
+and the pinned conversion report. The original detailed scan is retained with
+local repairs and a leveled pedestal; its marble appearance is replaced with
+solid clear glass. The small round wool rug is original procedural geometry
+using the credited CC0 linen map for subtle yarn variation.

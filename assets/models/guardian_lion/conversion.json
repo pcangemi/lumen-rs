@@ -1,0 +1,45 @@
+{
+  "source": "https://sketchfab.com/3d-models/chinese-guardian-lions-c981456846cc49f59cfa92553b7a7506",
+  "author": "SolidXperts",
+  "license": "CC-BY-NC-4.0",
+  "archive_sha256": "d2c42f4c41f970e07a878960b2eeb9b0ec4e4d137915b08f322c26c8c9719bc4",
+  "source_obj_sha256": "12b5a3b53e21466c30837d7082f71bb4d9bddfc993f5f285f0d4d70126e7e3ea",
+  "source_triangles": 1000000,
+  "source_components": 453,
+  "retained_surface_triangles": 990005,
+  "closed_openings": [
+    {
+      "edges": 1981,
+      "radius_source_units": 456.2710783287279,
+      "base": true
+    },
+    {
+      "edges": 4,
+      "radius_source_units": 1.4671512790226755,
+      "base": false
+    },
+    {
+      "edges": 4,
+      "radius_source_units": 1.098128627799332,
+      "base": false
+    }
+  ],
+  "base_leveling_plane": [
+    0.0036325263813764015,
+    0.019900800755333927,
+    -366.586235523151
+  ],
+  "base_resurfacing_source_units": 1.0,
+  "collapsed_micrometer_edges": 2,
+  "triangles": 986376,
+  "vertices": 493186,
+  "boundary_edges": 0,
+  "nonmanifold_edges": 0,
+  "unit_dimensions_xyz": [
+    0.479848413552337,
+    1.0,
+    0.6762798678836968
+  ],
+  "unit_volume": 0.1653386830723701,
+  "output_sha256": "a0b30af25978f19bb17c292872e718d6acdeb8f1b8a075ae6bba04d1496c0760"
+}

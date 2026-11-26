@@ -123,7 +123,9 @@ bool primitive_intersection(device const Primitive &p, Ray ray, float limit,
     } else {
         float3 e1 = p.p1.xyz, e2 = p.p2.xyz, q = cross(ray.d, e2);
         float det = dot(e1, q);
-        if (abs(det) < 1e-9f)
+        float3 determinant_terms = abs(e1 * q);
+        float determinant_scale = determinant_terms.x + determinant_terms.y + determinant_terms.z;
+        if (abs(det) <= 1e-7f * determinant_scale)
             return false;
         float inv = 1 / det;
         float3 s = ray.o - p.p0.xyz;

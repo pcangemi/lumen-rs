@@ -117,6 +117,8 @@ The white **Cangem'sss** sign is centred above the sideboard. Its 2.4 m wide ori
 
 The windows in this variant use closed glass panes with submillimeter waviness and slightly varying thickness. The two glass surfaces have different slopes to bend transmitted rays subtly. The daylight and original night presets retain their previous glazing and camera.
 
+The right-hand display area contains a **1.40 m clear-glass guardian lion**, including its carved pedestal. It uses SolidXperts' detailed scan with 986,376 triangles after local scan repairs and base leveling. The sculpture faces into the room on a separate **1.30 m round wool rug**, with about 30 cm of parquet between it and the main rug. The glass uses IOR 1.52, Fresnel reflection, refraction, total internal reflection and weak volume absorption. Its warm reflections come from the apartment lighting. This asset is **CC BY-NC 4.0**, separately from the engine's MIT license; see [its attribution and modifications](assets/models/guardian_lion/NOTICE.md).
+
 ```bash
 ./target/release/viewer --backend metal --scene interior-neon --samples 2048 --bounces 50
 ./target/release/lumen-rs --backend metal --scene interior-neon --samples 256 --bounces 50 \
@@ -136,6 +138,16 @@ cargo run --release --example render_neon_detail -- 128
 This writes `renders/neon-detail.png` and preserves the raw linear EXR and PNG alongside it.
 
 ![Level white script neon and its mounting fittings](renders/neon-detail.png)
+
+To inspect the glass sculpture at Full HD in the same apartment, without hiding any geometry or changing its lighting:
+
+```bash
+cargo run --release --example render_sculpture_detail -- 256
+```
+
+This writes `renders/sculpture-detail.png` and preserves the raw PNG and linear EXR. Glass caustics still use the existing path tracer; this scene does not add a dedicated caustic solver or spectral dispersion.
+
+![Clear-glass guardian lion on its separate round wool rug](renders/sculpture-detail.png)
 
 The strips use a warm-white RGB tint; source intensity is scene-tuned rather than calibrated in lumens. No postprocessed glow is used to replace light transport. The cornice is an original profile informed by [Orac indirect-lighting guidance](https://www.oracdecor.com/en_ie/faq) and [NOËL & MARQUET installation principles](https://noel-marquet.be/en/faqs/cat4_indirect-lighting), not a manufacturer-certified product replica. Neon construction references include [Krypton Neon component diagrams](https://www.neonshop.com/Tech/specs.html). For the equivalent Blender workflow, see [rounded curve geometry](https://docs.blender.org/manual/en/4.3/modeling/curves/properties/geometry.html) and [Andrew Price's neon tutorial](https://www.blenderguru.com/posts/2019/neon).
 
@@ -210,4 +222,4 @@ Read [architecture and Rust conventions](docs/ARCHITECTURE.md) and [the developm
 
 Transport foundations follow [PBRT's path tracer](https://pbr-book.org/4ed/Light_Transport_I_Surface_Reflection/A_Better_Path_Tracer), [BVH construction](https://pbr-book.org/4ed/Primitives_and_Intersection_Acceleration/Bounding_Volume_Hierarchies), and [volume transmittance estimators](https://pbr-book.org/4ed/Volume_Scattering/Transmittance). Denoising uses the [Open Image Denoise C API](https://www.openimagedenoise.org/documentation.html).
 
-MIT license. Copyright © 2026 Pierre CANGEMI.
+Code: MIT license. Copyright © 2026 Pierre CANGEMI. Bundled assets retain the individual licenses listed in [asset credits](assets/CREDITS.md), including the noncommercial guardian-lion scan.

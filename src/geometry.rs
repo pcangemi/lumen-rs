@@ -159,7 +159,10 @@ impl Primitive {
             let e2 = unpack_vec3(self.p2);
             let p = ray.direction.cross(e2);
             let det = e1.dot(p);
-            if det.abs() < 1e-9 {
+            // Relative cancellation tolerance preserves small triangles while
+            // rejecting numerically parallel rays at any mesh scale.
+            let determinant_scale = (e1 * p).abs().element_sum();
+            if det.abs() <= 1e-7 * determinant_scale {
                 return None;
             }
             let inv = 1.0 / det;

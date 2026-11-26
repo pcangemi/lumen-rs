@@ -624,6 +624,85 @@ fn volume_tracking_matches_analytic_and_numerical_transmittance() {
 }
 
 #[test]
+fn small_obj_faces_survive_import_and_intersection() {
+    let directory = std::env::temp_dir().join(format!("lumen-small-obj-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("tetrahedron.obj");
+    std::fs::write(
+        &path,
+        "v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 1\nf 1 3 2\nf 1 2 4\nf 1 4 3\nf 2 3 4\n",
+    )
+    .unwrap();
+    let mut s = scene::preset("studio", 1.0).unwrap();
+    for scale in [0.00001, 0.0001, 0.001, 1.0] {
+        s.primitives.clear();
+        assert_eq!(
+            s.import_obj(&path, Vec3::ZERO, scale, 0.0, None).unwrap(),
+            4
+        );
+        s.finish().unwrap();
+        let hit = s
+            .intersect(
+                Ray {
+                    origin: Vec3::new(scale * 0.2, scale * 0.3, -1.0),
+                    direction: Vec3::Z,
+                },
+                f32::INFINITY,
+                false,
+            )
+            .unwrap();
+        assert!(hit.front);
+        assert!((hit.t - 1.0).abs() < 1e-6);
+        assert_eq!(hit.geometric, -Vec3::Z);
+        // A parallel ray must stay a miss even with a zero determinant scale.
+        assert!(
+            s.intersect(
+                Ray {
+                    origin: Vec3::new(0.0, 0.0, -1.0),
+                    direction: Vec3::X
+                },
+                f32::INFINITY,
+                false
+            )
+            .is_none()
+        );
+    }
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "requires a Metal GPU accessible to the test process"]
+fn metal_preserves_small_triangle_visibility() {
+    let mut s = scene::preset("studio", 1.0).unwrap();
+    s.primitives.clear();
+    s.sky = Vec3::ZERO;
+    s.horizon = Vec3::ZERO;
+    let radiance = Vec3::new(3.0, 2.0, 1.0);
+    let light = s.add_material(Material::light(radiance));
+    s.add_quad(
+        Vec3::new(-0.000004, -0.000004, 0.0),
+        Vec3::X * 0.000008,
+        Vec3::Y * 0.000008,
+        light,
+    );
+    s.camera = lumen_rs::camera::Camera::new(Vec3::Z, Vec3::ZERO, 0.0002, 1.4, 0.0, 1.0);
+    s.finish().unwrap();
+    let cfg = RenderSettings {
+        width: 7,
+        height: 5,
+        samples: 4,
+        max_depth: 1,
+        ..Default::default()
+    };
+    let cpu = render::cpu(&s, cfg).unwrap();
+    let gpu = lumen_rs::metal_backend::render(&s, cfg).unwrap();
+    assert!(cpu.pixels.iter().all(|&p| p == radiance));
+    assert_eq!(cpu.pixels, gpu.pixels);
+    assert_eq!(gpu.stats.invalid_samples, 0);
+}
+
+#[test]
 fn obj_textures_resolve_relative_to_nested_mtl_files() {
     let directory = std::env::temp_dir().join(format!("lumen-import-test-{}", std::process::id()));
     std::fs::create_dir_all(directory.join("materials")).unwrap();

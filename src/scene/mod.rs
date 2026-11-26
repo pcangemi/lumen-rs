@@ -560,7 +560,9 @@ impl Scene {
                         uv[k] = Vec2::from_slice(&m.texcoords[i * 2..i * 2 + 2]);
                     }
                 }
-                if (p[1] - p[0]).cross(p[2] - p[0]).length_squared() > 1e-16 {
+                // Match scene validation: discarding small, valid triangles can
+                // perforate a closed refractive mesh after it is scaled down.
+                if (p[1] - p[0]).cross(p[2] - p[0]).length_squared() > 4e-24 {
                     self.primitives.push(Primitive::triangle(
                         p,
                         if normals { Some(n) } else { None },

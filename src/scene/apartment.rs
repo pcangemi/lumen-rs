@@ -4,6 +4,7 @@ mod details;
 mod exterior;
 mod joinery;
 mod neon;
+mod sculpture;
 use super::*;
 use crate::geometry::{pack_vec3, unpack_vec3};
 use crate::rng::Rng;
@@ -225,6 +226,7 @@ pub fn build(aspect: f32, lighting: Lighting) -> Result<Scene> {
         // Close the wall behind the camera so the cornice follows all four walls.
         scene.add_box(Vec3::new(-4.6, 0.0, 9.0), Vec3::new(4.7, 3.8, 9.2), plaster);
         neon::build(&mut scene, trim);
+        sculpture::build(&mut scene, &asset_root, linen_texture)?;
     }
     Ok(scene)
 }
