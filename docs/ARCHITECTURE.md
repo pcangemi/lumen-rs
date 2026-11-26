@@ -21,7 +21,8 @@ The native window owns a separate linear image. A worker sends completed tile co
 | `scene` | Scene assembly and OBJ/MTL import |
 | `scene/file` | JSON schema and validation |
 | `scene/presets`, `scene/apartment` | Studio, day/night apartment, courtyard and cloud demonstrations |
-| `scene/apartment/atmosphere` | Sourced lighting, rattan weave, exterior, curtains and canvas |
+| `scene/apartment/atmosphere` | Sourced lighting, rattan weave, curtains and canvas |
+| `scene/apartment/exterior` | Recessed masonry facade, glazed rooms and public street lighting |
 | `scene/water` | Closed displaced meshes with time-dependent waves |
 | `texture` | Linear atlas and bilinear texture sampling |
 | `medium` | Delta tracking, ratio tracking, cloud density and phase sampling |

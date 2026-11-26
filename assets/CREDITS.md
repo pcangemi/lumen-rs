@@ -65,3 +65,7 @@ illustrated by [Atulam's heritage windows](https://www.atulam.fr/fenetres/tradil
 as a construction reference. No manufacturer mesh or image is redistributed.
 The cabinet lamp is original geometry with a separate bulb and a diffuse-transmitting
 shade. Both floor-level lamp leads connect to modeled wall outlets.
+
+The opposite masonry facade, recessed rooms, window glazing, shutters, railings,
+downpipes and public street luminaires are original procedural project geometry.
+They reuse the credited plaster and linen maps.

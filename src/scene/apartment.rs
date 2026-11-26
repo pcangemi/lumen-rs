@@ -1,6 +1,7 @@
 //! Detailed apartment interior with cut parquet boards, joinery, mouldings and soft furnishings.
 mod atmosphere;
 mod details;
+mod exterior;
 mod joinery;
 use super::*;
 use crate::geometry::{pack_vec3, unpack_vec3};
@@ -126,7 +127,7 @@ pub fn build(aspect: f32, lighting: Lighting) -> Result<Scene> {
         Vec3::new(-4.4, 3.22, 9.0),
         plaster,
     );
-    atmosphere::exterior(&mut scene, night);
+    exterior::build(&mut scene, &asset_root, night)?;
 
     mouldings(&mut scene, trim);
     details::wool_rug(&mut scene, &asset_root)?;

@@ -368,6 +368,21 @@ fn detailed_interior_loads_textures_and_has_finite_geometry() {
             .iter()
             .all(|p| p.area().is_finite() && p.area() > 0.0)
     );
+    let mut raised_pile_hits = 0;
+    for x in 0..32 {
+        for z in 0..32 {
+            let ray = Ray {
+                origin: Vec3::new(0.2 + x as f32 * 0.018, 0.1, -2.05 + z as f32 * 0.016),
+                direction: -Vec3::Y,
+            };
+            let hit = scene.intersect(ray, 0.1, false).unwrap();
+            raised_pile_hits += usize::from(hit.p.y > 0.042);
+        }
+    }
+    assert!(
+        raised_pile_hits > 20,
+        "The open space between the table supports must retain full-height wool: {raised_pile_hits} raised hits"
+    );
 }
 
 #[test]
@@ -649,8 +664,10 @@ fn night_interior_uses_bulbs_without_daylight_emitters() {
     let mut bulb_lo = Vec3::splat(f32::INFINITY);
     let mut bulb_hi = Vec3::splat(f32::NEG_INFINITY);
     for primitive in &scene.primitives {
-        if scene.materials[primitive.info[1] as usize].is_thin_glass() {
-            let (lo, hi) = primitive.bounds();
+        let (lo, hi) = primitive.bounds();
+        if scene.materials[primitive.info[1] as usize].is_thin_glass()
+            && ((lo + hi) * 0.5 - Vec3::new(0.2, 2.533, -1.35)).length() < 0.05
+        {
             bulb_lo = bulb_lo.min(lo);
             bulb_hi = bulb_hi.max(hi);
         }
@@ -659,6 +676,7 @@ fn night_interior_uses_bulbs_without_daylight_emitters() {
         (0.079..0.081).contains(&(bulb_hi.x - bulb_lo.x)),
         "Preserve the full-size bulb envelope"
     );
+    let mut street_lamps = 0;
     for light in &scene.lights {
         let primitive = &scene.primitives[light.primitive as usize];
         let (lo, hi) = primitive.bounds();
@@ -668,7 +686,7 @@ fn night_interior_uses_bulbs_without_daylight_emitters() {
                 .try_into()
                 .unwrap(),
         );
-        if center.x < -6.0 && center.y > 4.0 {
+        if (-9.0..-7.0).contains(&center.x) && center.y > 4.0 {
             assert!(
                 power.max_element() <= 0.7,
                 "Daylight must not leak into the night preset"
@@ -680,10 +698,36 @@ fn night_interior_uses_bulbs_without_daylight_emitters() {
             && power.max_element() > 100.0;
         table_lamp |=
             (center - Vec3::new(4.03, 1.059, -0.70)).length() < 0.04 && power.max_element() > 100.0;
+        if center.x < -5.0 && center.y < 0.0 && power.max_element() > 100.0 {
+            street_lamps += 1;
+            let origin = Vec3::from_array(scene.camera.origin[..3].try_into().unwrap());
+            let direction = (center - origin).normalize();
+            let vector = |v: [f32; 4]| Vec3::from_array(v[..3].try_into().unwrap());
+            let forward = direction.dot(vector(scene.camera.forward));
+            let horizontal = direction.dot(vector(scene.camera.right));
+            let vertical = direction.dot(vector(scene.camera.up));
+            if forward > 0.0
+                && horizontal.abs() <= forward * scene.camera.right[3]
+                && vertical.abs() <= forward * scene.camera.up[3]
+            {
+                assert_eq!(
+                    scene.shadow_transmittance(
+                        Ray { origin, direction },
+                        origin.distance(center) - 0.1
+                    ),
+                    0.0,
+                    "Street luminaires inside the camera frustum must be occluded: {center}"
+                );
+            }
+        }
     }
     assert!(
         pendant && arc_lamp && table_lamp,
         "All three bulb emitters must illuminate the night scene"
+    );
+    assert_eq!(
+        street_lamps, 7,
+        "The street must have working public lighting"
     );
 }
 

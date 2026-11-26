@@ -2,65 +2,6 @@
 use super::*;
 use details::tube;
 
-pub(super) fn exterior(scene: &mut Scene, night: bool) {
-    // The sky card stays above the view through the windows; the street has actual depth.
-    let sky_light = scene.add_material(Material::light(if night {
-        Vec3::new(0.05, 0.09, 0.22)
-    } else {
-        Vec3::new(18.0, 21.0, 26.0)
-    }));
-    scene.add_quad(
-        Vec3::new(-8.0, 4.5, -6.0),
-        Vec3::Z * 16.0,
-        Vec3::Y * 8.0,
-        sky_light,
-    );
-    if !night {
-        let sun = scene.add_material(Material::light(Vec3::new(140.0, 112.0, 77.0)));
-        scene.add_quad(Vec3::new(-8.0, 5.0, 3.0), Vec3::Y * 0.7, Vec3::Z * 0.9, sun);
-    }
-    let stone = scene.add_material(Material::matte(Vec3::new(0.51, 0.49, 0.43)).patterned(1, 3.0));
-    let trim = scene.add_material(Material::matte(Vec3::new(0.65, 0.63, 0.57)));
-    let slate = scene.add_material(Material::matte(Vec3::new(0.10, 0.14, 0.18)));
-    scene.add_box(
-        Vec3::new(-16.0, -8.0, -24.0),
-        Vec3::new(-15.5, 8.0, 30.0),
-        stone,
-    );
-    for level in -2..=1 {
-        let y = level as f32 * 3.1;
-        scene.add_box(
-            Vec3::new(-15.5, y - 0.15, -24.0),
-            Vec3::new(-15.3, y, 30.0),
-            trim,
-        );
-        for bay in -6..=7 {
-            let z = bay as f32 * 3.6;
-            let glazing = if night && (bay + level) % 3 == 0 {
-                scene.add_material(Material::light(Vec3::new(0.7, 0.36, 0.13)))
-            } else {
-                slate
-            };
-            scene.add_box(
-                Vec3::new(-15.48, y + 0.35, z),
-                Vec3::new(-15.40, y + 2.55, z + 1.25),
-                trim,
-            );
-            scene.add_quad(
-                Vec3::new(-15.39, y + 0.43, z + 0.08),
-                Vec3::Y * 2.04,
-                Vec3::Z * 1.09,
-                glazing,
-            );
-            scene.add_box(
-                Vec3::new(-15.38, y + 0.43, z + 0.60),
-                Vec3::new(-15.33, y + 2.47, z + 0.65),
-                trim,
-            );
-        }
-    }
-}
-
 pub(super) fn balcony(scene: &mut Scene, start: f32, end: f32, iron: usize) {
     let x = -4.91;
     for y in [0.37, 1.22] {

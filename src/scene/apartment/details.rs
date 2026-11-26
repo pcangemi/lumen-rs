@@ -242,6 +242,25 @@ pub(super) fn radiator(scene: &mut Scene, center_z: f32, paint: usize, brass: us
     }
 }
 
+/// Compress yarn only beneath the imported table's two floor-level support rails.
+fn rug_pile_height(x: f32, z: f32, free_height: f32) -> f32 {
+    // Bounds measured from the placed model at y < 0.045 m. The tabletop spans
+    // the gap between these rails but does not press on the rug underneath it.
+    let distance = [(-0.299_217, -0.170_528), (1.170_528, 1.299_217)]
+        .into_iter()
+        .map(|(left, right)| {
+            let dx = (left - x).max(x - right).max(0.0);
+            let dz = (-2.196_839 - z).max(z + 1.403_161).max(0.0);
+            Vec2::new(dx, dz).length()
+        })
+        .fold(f32::INFINITY, f32::min);
+    // A loop extends up to 12 mm sideways from its root. Keep that margin
+    // compressed, then ease back to the natural pile over the next 35 mm.
+    let t = ((distance - 0.012) / 0.035).clamp(0.0, 1.0);
+    let blend = t * t * (3.0 - 2.0 * t);
+    0.003 + (free_height - 0.003) * blend
+}
+
 pub(super) fn wool_rug(scene: &mut Scene, asset_root: &Path) -> Result<()> {
     let color = scene
         .textures
@@ -313,13 +332,7 @@ pub(super) fn wool_rug(scene: &mut Scene, asset_root: &Path) -> Result<()> {
         for row in 0..194 {
             let x = -1.994 + (column as f32 + rng.uniform() * 0.7) * 0.01795;
             let z = -2.494 + (row as f32 + rng.uniform() * 0.7) * 0.01795;
-            // Furniture contact patches compress the pile instead of letting it pierce the feet.
-            let under_table = (x - 0.5).abs() < 0.83 && (z + 1.8).abs() < 0.39;
-            let pile = if under_table {
-                0.003
-            } else {
-                0.022 + rng.uniform() * 0.028
-            };
+            let pile = rug_pile_height(x, z, 0.022 + rng.uniform() * 0.028);
             let angle = rng.uniform() * TAU;
             let direction = Vec3::new(angle.cos(), 0.0, angle.sin());
             let curl = Vec3::new(-direction.z, 0.0, direction.x);
