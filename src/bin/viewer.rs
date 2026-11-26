@@ -17,6 +17,7 @@ use std::{
         mpsc::{self, Receiver},
     },
     thread,
+    time::{Duration, Instant},
 };
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -34,9 +35,9 @@ struct Args {
     scene_file: Option<PathBuf>,
     #[arg(long, value_enum, default_value = "auto")]
     backend: Backend,
-    #[arg(long, default_value_t = 960)]
+    #[arg(long, default_value_t = 1920)]
     width: u32,
-    #[arg(long, default_value_t = 640)]
+    #[arg(long, default_value_t = 1080)]
     height: u32,
     #[arg(long, default_value_t = 512)]
     samples: u32,
@@ -78,8 +79,12 @@ enum Event {
         nodes: usize,
     },
     Tile(TileUpdate),
-    Denoising,
-    Denoised(Vec<glam::Vec3>),
+    Denoising(u32),
+    Denoised {
+        pixels: Vec<glam::Vec3>,
+        samples: u32,
+    },
+    Finalizing,
     Warning(String),
     Finished(Box<RenderOutput>),
     Failed(String),
@@ -87,6 +92,7 @@ enum Event {
 struct Job {
     receiver: Receiver<Event>,
     control: Arc<RenderControl>,
+    started: Instant,
 }
 impl Drop for Job {
     fn drop(&mut self) {
@@ -129,52 +135,74 @@ fn start(args: &Args) -> Job {
                 primitives: scene.primitives.len(),
                 nodes: scene.bvh.nodes.len(),
             });
-            let denoiser = if args.raw {
+            let scene = Arc::new(scene);
+            // OIDN owns its handle on a separate thread; filtering never stalls GPU dispatch.
+            let filter = if args.raw {
                 None
             } else {
-                match lumen_rs::denoise::Denoiser::new() {
-                    Ok(denoiser) => Some(denoiser),
-                    Err(error) => {
-                        eprintln!("Denoising unavailable: {error:#}");
-                        let _ = sender.send(Event::Warning("RAW: install denoiser".into()));
-                        None
+                let (requests, incoming) = mpsc::sync_channel::<(Vec<glam::Vec3>, u32)>(1);
+                let scene = Arc::clone(&scene);
+                let events = sender.clone();
+                let control = Arc::clone(&worker_control);
+                let width = args.width;
+                let height = args.height;
+                let handle = thread::spawn(move || {
+                    let denoiser = match lumen_rs::denoise::Denoiser::new() {
+                        Ok(denoiser) => denoiser,
+                        Err(error) => {
+                            eprintln!("Denoising unavailable: {error:#}");
+                            let _ = events.send(Event::Warning("RAW: install denoiser".into()));
+                            return;
+                        }
+                    };
+                    let guides = lumen_rs::denoise::Guides::new(&scene, width, height);
+                    while let Ok((pixels, samples)) = incoming.recv() {
+                        if control.cancelled.load(Ordering::Relaxed) {
+                            break;
+                        }
+                        let _ = events.send(Event::Denoising(samples));
+                        match denoiser.filter(&pixels, &guides, width, height) {
+                            Ok(pixels) => {
+                                let _ = events.send(Event::Denoised { pixels, samples });
+                            }
+                            Err(error) => {
+                                eprintln!("{error:#}");
+                                let _ = events.send(Event::Warning("Denoising failed".into()));
+                            }
+                        }
                     }
-                }
+                });
+                Some((requests, handle))
             };
-            let guides = denoiser
-                .as_ref()
-                .map(|_| lumen_rs::denoise::Guides::new(&scene, args.width, args.height));
+            let mut last_filter = Instant::now();
+            let mut first_filter = true;
             let mut live_pixels =
                 vec![glam::Vec3::ZERO; args.width as usize * args.height as usize];
             let update = |tile: TileUpdate| {
                 for (local, pixel) in tile.pixels.iter().enumerate() {
                     live_pixels[tile.tile.image_index(local, args.width)] = *pixel;
                 }
+                let pass_samples = tile.pass_samples;
                 let filter_this_pass = tile.pass_complete
-                    && tile.pass_samples >= 8
-                    && ((tile.pass_samples >= 32 && tile.pass_samples.is_power_of_two())
-                        || tile.pass_samples == args.samples);
+                    && pass_samples >= 8
+                    && pass_samples < args.samples
+                    && (first_filter || last_filter.elapsed() >= Duration::from_secs(3));
                 if sender.send(Event::Tile(tile)).is_err() {
                     worker_control.cancelled.store(true, Ordering::Relaxed);
                     return;
                 }
                 if filter_this_pass
                     && !worker_control.cancelled.load(Ordering::Relaxed)
-                    && let (Some(denoiser), Some(guides)) = (&denoiser, &guides)
+                    && let Some((requests, _)) = &filter
+                    && requests
+                        .try_send((live_pixels.clone(), pass_samples))
+                        .is_ok()
                 {
-                    let _ = sender.send(Event::Denoising);
-                    match denoiser.filter(&live_pixels, guides, args.width, args.height) {
-                        Ok(pixels) => {
-                            let _ = sender.send(Event::Denoised(pixels));
-                        }
-                        Err(error) => {
-                            eprintln!("{error:#}");
-                            let _ = sender.send(Event::Warning("Denoising failed".into()));
-                        }
-                    }
+                    last_filter = Instant::now();
+                    first_filter = false;
                 }
             };
-            if metal {
+            let result = if metal {
                 #[cfg(target_os = "macos")]
                 {
                     lumen_rs::metal_backend::render_progressive(
@@ -190,7 +218,18 @@ fn start(args: &Args) -> Job {
                 }
             } else {
                 progressive::cpu(&scene, args.settings(), &worker_control, update)
+            };
+            if let Some((requests, handle)) = filter {
+                if let Ok(result) = &result
+                    && !worker_control.cancelled.load(Ordering::Relaxed)
+                {
+                    let _ = sender.send(Event::Finalizing);
+                    let _ = requests.send((result.pixels.clone(), args.samples));
+                }
+                drop(requests);
+                let _ = handle.join();
             }
+            result
         };
         match run() {
             Ok(result) => {
@@ -201,7 +240,11 @@ fn start(args: &Args) -> Job {
             }
         }
     });
-    Job { receiver, control }
+    Job {
+        receiver,
+        control,
+        started: Instant::now(),
+    }
 }
 fn update(state: &mut ViewerState, event: Event, cancelled: bool) {
     match event {
@@ -227,12 +270,16 @@ fn update(state: &mut ViewerState, event: Event, cancelled: bool) {
             state.seconds = update.elapsed.as_secs_f64();
             state.last_tile = Some(update.tile);
         }
-        Event::Denoising => {
-            state.status = "DENOISING".into();
+        Event::Denoising(samples) => {
+            state.notice = format!("Filtering {samples} spp");
         }
-        Event::Denoised(pixels) => {
+        Event::Denoised { pixels, samples } => {
             state.filtered_pixels = Some(pixels);
-            state.status = if state.paused { "PAUSED" } else { "RENDERING" }.into();
+            state.filtered_samples = samples;
+            state.notice = format!("Clean preview: {samples} spp");
+        }
+        Event::Finalizing => {
+            state.status = "FINAL DENOISE".into();
         }
         Event::Warning(message) => {
             state.notice = message;
@@ -241,7 +288,7 @@ fn update(state: &mut ViewerState, event: Event, cancelled: bool) {
             state.finished = true;
             state.paused = false;
             state.pixels = result.pixels;
-            state.seconds = result.stats.render_seconds;
+            state.seconds = state.seconds.max(result.stats.render_seconds);
             state.status = if cancelled { "STOPPED" } else { "COMPLETE" }.into();
             if !cancelled {
                 state.progress = 1.0;
@@ -326,6 +373,7 @@ fn main() -> Result<()> {
             let guides = lumen_rs::denoise::Guides::new(&scene, args.width, args.height);
             state.filtered_pixels =
                 Some(denoiser.filter(&state.pixels, &guides, args.width, args.height)?);
+            state.filtered_samples = args.samples;
         }
         let (pixels, _) = viewer_ui::draw(&state, 1280, 820);
         let bytes: Vec<u8> = pixels
@@ -367,6 +415,9 @@ fn main() -> Result<()> {
                 event,
                 job.control.cancelled.load(Ordering::Relaxed),
             );
+        }
+        if !state.finished {
+            state.seconds = job.started.elapsed().as_secs_f64();
         }
         let (width, height) = window.get_size();
         if width == 0 || height == 0 {
@@ -449,4 +500,54 @@ fn main() -> Result<()> {
         window.update_with_buffer(&pixels, width, height)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "requires the optional Open Image Denoise runtime"]
+    fn worker_delivers_final_clean_image_before_completion() {
+        let args = Args::parse_from([
+            "viewer",
+            "--backend",
+            "cpu",
+            "--scene",
+            "studio",
+            "--width",
+            "24",
+            "--height",
+            "16",
+            "--samples",
+            "16",
+            "--batch",
+            "8",
+        ]);
+        let job = start(&args);
+        let mut tiles = 0;
+        let mut clean_samples = 0;
+        loop {
+            match job
+                .receiver
+                .recv_timeout(Duration::from_secs(30))
+                .expect("Viewer worker stalled")
+            {
+                Event::Tile(_) => tiles += 1,
+                Event::Denoised { pixels, samples } => {
+                    assert!(pixels.iter().all(|p| p.is_finite()));
+                    assert!(samples >= clean_samples);
+                    clean_samples = samples;
+                }
+                Event::Finished(result) => {
+                    assert!(tiles > 0);
+                    assert_eq!(result.pixels.len(), 24 * 16);
+                    assert_eq!(clean_samples, 16);
+                    break;
+                }
+                Event::Failed(error) | Event::Warning(error) => panic!("{error}"),
+                _ => {}
+            }
+        }
+    }
 }

@@ -11,6 +11,13 @@ pub struct TextureAtlas {
 }
 impl TextureAtlas {
     pub fn load(&mut self, path: &Path) -> Result<usize> {
+        self.load_encoded(path, true)
+    }
+    /// Normal, roughness and metallic maps contain linear data, not sRGB colors.
+    pub fn load_data(&mut self, path: &Path) -> Result<usize> {
+        self.load_encoded(path, false)
+    }
+    fn load_encoded(&mut self, path: &Path, srgb: bool) -> Result<usize> {
         let image = image::open(path)
             .with_context(|| format!("Loading texture {}", path.display()))?
             .to_rgb32f();
@@ -28,7 +35,9 @@ impl TextureAtlas {
             .push([self.pixels.len() as u32, width, height, 0]);
         self.pixels.extend(image.pixels().map(|pixel| {
             let linear = |x: f32| {
-                if x <= 0.04045 {
+                if !srgb {
+                    x
+                } else if x <= 0.04045 {
                     x / 12.92
                 } else {
                     ((x + 0.055) / 1.055).powf(2.4)

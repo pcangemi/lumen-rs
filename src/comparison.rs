@@ -31,28 +31,48 @@ pub fn export(scene: &Scene, settings: RenderSettings, path: &Path) -> Result<()
         image::Rgb(scene.environment(Vec3::new(0.0, elevation, 0.0)).to_array())
     });
     environment.save_with_format(path.join("environment.exr"), image::ImageFormat::OpenExr)?;
-    let triangles: Vec<_> = scene.primitives.iter().filter(|p| p.info[0] == 1).map(|p| {
-        let origin = unpack_vec3(p.p0);
-        let positions = [origin, origin + unpack_vec3(p.p1), origin + unpack_vec3(p.p2)];
-        let normals = [unpack_vec3(p.n0), unpack_vec3(p.n1), unpack_vec3(p.n2)];
-        let uvs = [Vec2::new(p.uv01[0], p.uv01[1]), Vec2::new(p.uv01[2], p.uv01[3]), Vec2::new(p.uv2[0], p.uv2[1])];
-        let material = &scene.materials[p.info[1] as usize];
-        let colors = [0, 1, 2].map(|i| {
-            if material.detail[2] > 0.0 && material.detail[3] < 0.0 {
-                scene.surface_color(&crate::geometry::Hit {
-                    t: 0.0, p: positions[i], normal: normals[i], geometric: normals[i],
-                    uv: uvs[i], front: true, primitive: 0, material: p.info[1] as usize,
-                }).to_array()
-            } else { material.color(positions[i]).to_array() }
-        });
-        json!({
-            "colors": colors,
-            "positions": [origin.to_array(), (origin + unpack_vec3(p.p1)).to_array(), (origin + unpack_vec3(p.p2)).to_array()],
-            "normals": [unpack_vec3(p.n0).to_array(), unpack_vec3(p.n1).to_array(), unpack_vec3(p.n2).to_array()],
-            "uvs": [[p.uv01[0],p.uv01[1]], [p.uv01[2],p.uv01[3]], [p.uv2[0],p.uv2[1]]],
-            "material": p.info[1],
+    let triangles: Vec<_> = scene
+        .primitives
+        .iter()
+        .filter(|p| p.info[0] == 1)
+        .map(|p| {
+            let origin = unpack_vec3(p.p0);
+            let positions = [
+                origin,
+                origin + unpack_vec3(p.p1),
+                origin + unpack_vec3(p.p2),
+            ];
+            let normals = [unpack_vec3(p.n0), unpack_vec3(p.n1), unpack_vec3(p.n2)];
+            let original_uvs = [
+                Vec2::new(p.uv01[0], p.uv01[1]),
+                Vec2::new(p.uv01[2], p.uv01[3]),
+                Vec2::new(p.uv2[0], p.uv2[1]),
+            ];
+            let material = &scene.materials[p.info[1] as usize];
+            let uvs = [0, 1, 2].map(|i| {
+                if material.detail[3] >= 0.0 {
+                    return original_uvs[i];
+                }
+                let n = normals[i].abs();
+                let position = positions[i];
+                if n.y >= n.x && n.y >= n.z {
+                    Vec2::new(position.x, position.z)
+                } else if n.x > n.z {
+                    Vec2::new(position.z, position.y)
+                } else {
+                    Vec2::new(position.x, position.y)
+                }
+            });
+            let colors = positions.map(|position| material.color(position).to_array());
+            json!({
+                "colors": colors,
+                "positions": positions.map(|position| position.to_array()),
+                "normals": normals.map(|normal| normal.to_array()),
+                "uvs": uvs.map(|uv| uv.to_array()),
+                "material": p.info[1],
+            })
         })
-    }).collect();
+        .collect();
     let spheres: Vec<_> = scene.primitives.iter().filter(|p| p.info[0] == 0).map(|p| {
         json!({"center": unpack_vec3(p.p0).to_array(), "radius": p.p0[3], "material": p.info[1]})
     }).collect();
@@ -60,9 +80,11 @@ pub fn export(scene: &Scene, settings: RenderSettings, path: &Path) -> Result<()
         .materials
         .iter()
         .map(|m| {
+            let mut detail = m.detail;
+            detail[3] = detail[3].abs();
             json!({
                 "base": m.base, "surface": m.surface, "emission": m.emission,
-                "absorption": m.absorption, "detail": m.detail,
+                "absorption": m.absorption, "detail": detail, "maps": m.maps,
             })
         })
         .collect();
@@ -77,7 +99,7 @@ pub fn export(scene: &Scene, settings: RenderSettings, path: &Path) -> Result<()
         "differences": [
             "Cycles Principled BSDF approximates Lumen's Lambert plus single-scattering GGX mixture.",
             "Analytic spheres become tessellated spheres in Cycles.",
-            "Procedural colors and world-projected textures are baked at mesh vertices for this export.",
+            "Procedural colors are baked at vertices; world projections become UVs and may differ on curved surfaces.",
             "Glass in Cycles uses its glass shader and absorption; shading-normal behavior may differ.",
             "Compare each renderer to its own high-sample reference before comparing time to quality."
         ]

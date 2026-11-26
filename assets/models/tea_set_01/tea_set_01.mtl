@@ -1,0 +1,8 @@
+newmtl material_0
+Kd 1 1 1
+Pr 1
+Pm 1
+map_Kd 0-color.jpg
+norm 0-normal.jpg
+map_Pr 0-roughness.png
+map_Pm 0-metallic.png

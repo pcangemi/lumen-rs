@@ -44,6 +44,7 @@ pub struct ViewerState {
     pub pixels: Vec<Vec3>,
     pub filtered_pixels: Option<Vec<Vec3>>,
     pub show_filtered: bool,
+    pub filtered_samples: u32,
     pub scene: String,
     pub backend: String,
     pub device: String,
@@ -85,6 +86,7 @@ impl ViewerState {
             pixels: vec![Vec3::ZERO; width as usize * height as usize],
             filtered_pixels: None,
             show_filtered: true,
+            filtered_samples: 0,
             scene: scene.into(),
             backend: "INITIALIZING".into(),
             device: String::new(),
@@ -242,7 +244,7 @@ pub fn draw(state: &ViewerState, width: usize, height: usize) -> (Vec<u32>, Vec<
     }
     if let Some(tile) = state
         .last_tile
-        .filter(|_| !state.finished && (!state.show_filtered || state.filtered_pixels.is_none()))
+        .filter(|_| !state.finished && !state.paused && state.status == "RENDERING")
     {
         let x = origin_x + (tile.x as f32 * scale) as usize;
         let y = origin_y + (tile.y as f32 * scale) as usize;
@@ -273,8 +275,12 @@ pub fn draw(state: &ViewerState, width: usize, height: usize) -> (Vec<u32>, Vec<
         24,
         height.saturating_sub(45),
         &format!(
-            "{} x {}  /  64 px TILES  /  {} BOUNCES",
-            state.image_width, state.image_height, state.bounces
+            "{} x {}  /  PASS {} SPP  /  CLEAN {} SPP  /  {} BOUNCES",
+            state.image_width,
+            state.image_height,
+            state.pass_samples,
+            state.filtered_samples,
+            state.bounces
         ),
         MUTED,
         1,
@@ -317,6 +323,15 @@ pub fn draw(state: &ViewerState, width: usize, height: usize) -> (Vec<u32>, Vec<
     }
     canvas.line(left, 230, row_width, 0x353a3e);
     canvas.text(left, 250, &state.status, ACCENT, 1);
+    if !state.finished {
+        let activity_x = left + ((state.seconds * 35.0) as usize % row_width.max(1));
+        canvas.line(
+            activity_x,
+            265,
+            6.min(left + row_width - activity_x),
+            ACCENT,
+        );
+    }
     canvas.text(
         left,
         277,
@@ -414,4 +429,36 @@ pub fn draw(state: &ViewerState, width: usize, height: usize) -> (Vec<u32>, Vec<
         );
     }
     (canvas.pixels, buttons)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clean_preview_keeps_tile_activity_visible() {
+        let mut state = ViewerState::new(320, 200, 512, 12, "interior", 0.0);
+        state.filtered_pixels = Some(vec![Vec3::splat(0.4); 320 * 200]);
+        state.filtered_samples = 128;
+        state.status = "RENDERING".into();
+        state.last_tile = Some(Tile {
+            x: 64,
+            y: 64,
+            width: 64,
+            height: 64,
+        });
+        let (active, _) = draw(&state, 1280, 820);
+        state.last_tile = None;
+        let (inactive, _) = draw(&state, 1280, 820);
+        let outline = active
+            .iter()
+            .zip(inactive)
+            .filter(|(a, b)| **a != *b && **a == ACCENT)
+            .count();
+        assert!(
+            outline > 300,
+            "Clean display must retain a visible tile border"
+        );
+        assert_eq!(state.display_pixels()[0], Vec3::splat(0.4));
+    }
 }

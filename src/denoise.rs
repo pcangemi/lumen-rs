@@ -41,7 +41,7 @@ struct Api {
     commit_filter: Commit,
     execute_filter: Commit,
 }
-/// This handle stays on the render thread. It is never shared with the window thread.
+/// This handle stays on its owning worker thread. It is never shared with the window thread.
 pub struct Denoiser {
     api: Api,
     device: Handle,
@@ -82,9 +82,7 @@ impl Guides {
                         scene
                             .camera
                             .ray(index % width, index / width, width, height, &mut rng);
-                    let hit = scene
-                        .bvh
-                        .intersect(&scene.primitives, ray, f32::INFINITY, false);
+                    let hit = scene.intersect(ray, f32::INFINITY, false);
                     let limit = hit.as_ref().map_or(f32::INFINITY, |hit| hit.t);
                     if scene
                         .medium
@@ -99,7 +97,7 @@ impl Guides {
                         } else {
                             scene.surface_color(&hit)
                         };
-                        normal += hit.normal;
+                        normal += scene.surface_shading(&hit, -ray.direction).1;
                     } else {
                         albedo += Vec3::ONE;
                     }

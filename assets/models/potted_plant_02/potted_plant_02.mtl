@@ -1,0 +1,18 @@
+newmtl material_0
+Kd 1 1 1
+Pr 1
+Pm 0
+map_Kd 0-color.jpg
+norm 0-normal.jpg
+map_Pr 0-roughness.png
+map_Pm 0-metallic.png
+
+newmtl material_1
+Kd 1 1 1
+Pr 1
+Pm 0
+map_Kd 1-color.jpg
+norm 1-normal.jpg
+map_Pr 1-roughness.png
+map_Pm 1-metallic.png
+map_d leaves-alpha.png

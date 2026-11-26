@@ -1,16 +1,17 @@
 //! Detailed apartment interior with cut parquet boards, joinery, mouldings and soft furnishings.
+mod details;
 use super::*;
 use crate::geometry::{pack_vec3, unpack_vec3};
 use crate::rng::Rng;
 use std::f32::consts::TAU;
 
 pub fn build(aspect: f32) -> Result<Scene> {
-    let from = Vec3::new(3.45, 1.75, 6.1);
-    let target = Vec3::new(-0.5, 1.35, -1.9);
+    let from = Vec3::new(3.05, 1.65, 4.1);
+    let target = Vec3::new(-0.2, 1.3, -2.0);
     let mut scene = Scene::empty(Camera::new(
         from,
         target,
-        54.0,
+        58.0,
         aspect,
         0.0,
         from.distance(target),
@@ -22,9 +23,6 @@ pub fn build(aspect: f32) -> Result<Scene> {
     let plaster_texture = scene
         .textures
         .load(&asset_root.join("textures/plaster.jpg"))?;
-    let fabric_texture = scene
-        .textures
-        .load(&asset_root.join("textures/fabric.jpg"))?;
     let linen_texture = scene
         .textures
         .load(&asset_root.join("textures/linen.jpg"))?;
@@ -37,22 +35,18 @@ pub fn build(aspect: f32) -> Result<Scene> {
         surface: [0.36, 0.0, 0.0, 1.5],
         ..Material::matte(Vec3::new(0.83, 0.82, 0.76))
     });
+    let radiator_paint = scene.add_material(Material {
+        surface: [0.52, 0.0, 0.0, 1.5],
+        ..Material::matte(Vec3::new(0.61, 0.62, 0.57))
+            .textured(plaster_texture, -8.0)
+            .texture_strength(0.22)
+    });
     let dark = scene.add_material(Material::metal(Vec3::splat(0.035), 0.35));
     let brass = scene.add_material(Material::metal(Vec3::new(0.74, 0.49, 0.22), 0.3));
     let walnut = scene.add_material(Material {
         surface: [0.32, 0.0, 0.0, 1.5],
         ..Material::matte(Vec3::new(0.46, 0.28, 0.15)).textured(oak_texture, -0.7)
     });
-    let fabric = scene.add_material(
-        Material::matte(Vec3::new(0.92, 0.85, 0.70))
-            .textured(fabric_texture, -3.0)
-            .texture_strength(0.25),
-    );
-    let cushion = scene.add_material(
-        Material::matte(Vec3::new(0.39, 0.47, 0.35))
-            .textured(fabric_texture, -3.0)
-            .texture_strength(0.25),
-    );
     let curtain = scene.add_material(
         Material::matte(Vec3::new(0.89, 0.87, 0.80))
             .textured(linen_texture, -2.0)
@@ -80,7 +74,7 @@ pub fn build(aspect: f32) -> Result<Scene> {
     // The left wall is assembled around three actual openings.
     scene.add_box(
         Vec3::new(-4.65, 0.0, -4.5),
-        Vec3::new(-4.4, 0.48, 9.0),
+        Vec3::new(-4.4, 0.72, 9.0),
         plaster,
     );
     scene.add_box(
@@ -92,122 +86,60 @@ pub fn build(aspect: f32) -> Result<Scene> {
     let mut previous = -4.5;
     for (start, end) in windows {
         scene.add_box(
-            Vec3::new(-4.65, 0.48, previous),
+            Vec3::new(-4.65, 0.72, previous),
             Vec3::new(-4.4, 3.22, start),
             plaster,
         );
         window(&mut scene, start, end, trim, brass, dark, glass);
-        folded_curtain(&mut scene, start - 0.06, 0.40, curtain);
-        folded_curtain(&mut scene, end - 0.34, 0.40, curtain);
+        details::window_surround(&mut scene, start, end, trim, brass);
+        details::radiator(&mut scene, (start + end) * 0.5, radiator_paint, brass, dark);
+        // The bunched cloth lies entirely outside the swept casement opening.
+        folded_curtain(&mut scene, start - 0.48, 0.36, curtain);
+        folded_curtain(&mut scene, end + 0.12, 0.36, curtain);
         previous = end;
     }
     scene.add_box(
-        Vec3::new(-4.65, 0.48, previous),
+        Vec3::new(-4.65, 0.72, previous),
         Vec3::new(-4.4, 3.22, 9.0),
         plaster,
     );
-    let daylight = scene.add_material(Material::light(Vec3::new(9.0, 10.0, 12.0)));
+    let daylight = scene.add_material(Material::light(Vec3::new(6.0, 6.7, 8.0)));
     scene.add_quad(
         Vec3::new(-6.4, 0.1, -5.5),
         Vec3::Z * 12.0,
         Vec3::Y * 6.0,
         daylight,
     );
-    let sunlight = scene.add_material(Material::light(Vec3::new(13.0, 10.0, 6.7)));
+    let sunlight = scene.add_material(Material::light(Vec3::new(80.0, 65.0, 46.0)));
     scene.add_quad(
-        Vec3::new(-7.0, 4.5, 2.5),
-        Vec3::Y * 1.3,
-        Vec3::Z * 2.0,
+        Vec3::new(-7.0, 3.8, 3.0),
+        Vec3::Y * 0.65,
+        Vec3::Z * 0.8,
         sunlight,
     );
 
     mouldings(&mut scene, trim);
-    let rug = scene.add_material(
-        Material::matte(Vec3::new(0.72, 0.70, 0.61))
-            .textured(fabric_texture, -4.0)
-            .texture_strength(0.2),
-    );
-    scene.rounded_box(
-        Vec3::new(-2.0, 0.012, -2.2),
-        Vec3::new(3.7, 0.035, 2.15),
-        0.018,
-        rug,
-    );
+    details::wool_rug(&mut scene, &asset_root)?;
+    details::imported_furniture(&mut scene, &asset_root)?;
 
-    // Upholstered sofa: separate cushions, softened edges, dark reveal and slender feet.
-    scene.rounded_box(
-        Vec3::new(-0.8, 0.20, -3.63),
-        Vec3::new(3.35, 0.43, -2.08),
-        0.08,
-        walnut,
-    );
-    scene.rounded_box(
-        Vec3::new(-0.85, 0.43, -3.68),
-        Vec3::new(3.4, 1.45, -3.24),
-        0.17,
-        fabric,
-    );
-    for x in [-0.67, 0.65, 1.97] {
-        scene.rounded_box(
-            Vec3::new(x, 0.43, -3.2),
-            Vec3::new(x + 1.25, 0.74, -2.11),
-            0.13,
-            fabric,
-        );
-        // A raised seam below the cushion gives a fine, geometric shadow line.
-        scene.rounded_box(
-            Vec3::new(x + 0.02, 0.47, -2.12),
-            Vec3::new(x + 1.23, 0.49, -2.10),
-            0.008,
-            fabric,
-        );
-    }
-    for x in [-1.03, 3.2] {
-        scene.rounded_box(
-            Vec3::new(x, 0.36, -3.65),
-            Vec3::new(x + 0.38, 1.03, -2.05),
-            0.16,
-            fabric,
-        );
-    }
-    for x in [-0.65, 3.0] {
-        for z in [-3.4, -2.25] {
-            cylinder(&mut scene, Vec3::new(x, 0.025, z), 0.035, 0.21, brass);
-        }
-    }
-    scene.rounded_box(
-        Vec3::new(-0.48, 0.75, -3.21),
-        Vec3::new(0.24, 1.32, -2.94),
-        0.13,
-        cushion,
-    );
-    scene.rounded_box(
-        Vec3::new(2.23, 0.75, -3.21),
-        Vec3::new(2.95, 1.32, -2.94),
-        0.13,
-        cushion,
-    );
+    details::apartment_decor(&mut scene, &asset_root, brass)?;
 
     // Low circular table, layered books, and original ceramic vessel.
-    cylinder(&mut scene, Vec3::new(0.5, 0.46, -0.5), 1.12, 0.055, walnut);
-    for x in [-0.13, 1.13] {
-        cylinder(&mut scene, Vec3::new(x, 0.035, -0.5), 0.13, 0.43, walnut);
-    }
     let paper = scene.add_material(Material::matte(Vec3::new(0.76, 0.73, 0.64)));
     let book = scene.add_material(Material::matte(Vec3::new(0.12, 0.18, 0.17)));
     scene.add_box(
-        Vec3::new(0.35, 0.517, -0.8),
-        Vec3::new(0.95, 0.535, -0.35),
+        Vec3::new(0.68, 0.554, -2.0),
+        Vec3::new(1.18, 0.572, -1.65),
         book,
     );
     scene.add_box(
-        Vec3::new(0.36, 0.535, -0.79),
-        Vec3::new(0.94, 0.58, -0.36),
+        Vec3::new(0.69, 0.572, -1.99),
+        Vec3::new(1.17, 0.617, -1.66),
         paper,
     );
     scene.add_box(
-        Vec3::new(0.35, 0.58, -0.8),
-        Vec3::new(0.95, 0.597, -0.35),
+        Vec3::new(0.68, 0.617, -2.0),
+        Vec3::new(1.18, 0.634, -1.65),
         book,
     );
     let ceramic = scene.add_material(Material {
@@ -216,7 +148,7 @@ pub fn build(aspect: f32) -> Result<Scene> {
     });
     scene.import_obj(
         &asset_root.join("vessel.obj"),
-        Vec3::new(-0.05, 0.515, -0.55),
+        Vec3::new(4.02, 0.693, -1.9),
         0.38,
         0.0,
         Some(ceramic),
@@ -239,7 +171,7 @@ pub fn build(aspect: f32) -> Result<Scene> {
     ellipse(&mut scene, Vec3::new(0.9, 2.3, -4.34), 0.57, 0.48, ink);
     ellipse(&mut scene, Vec3::new(1.68, 2.58, -4.33), 0.4, 0.3, clay);
 
-    pendant(&mut scene, Vec3::new(0.4, 0.0, -0.7), trim, brass, dark);
+    pendant(&mut scene, Vec3::new(0.4, 0.0, -1.65), trim, brass);
     Ok(scene)
 }
 
@@ -391,19 +323,19 @@ fn window(
     let x = -4.38;
     for (min, max) in [
         (
-            Vec3::new(x - 0.2, 0.47, start - 0.06),
-            Vec3::new(x + 0.2, 0.55, end + 0.06),
+            Vec3::new(x - 0.2, 0.71, start - 0.06),
+            Vec3::new(x + 0.2, 0.79, end + 0.06),
         ),
         (
             Vec3::new(x - 0.18, 3.14, start - 0.07),
             Vec3::new(x + 0.05, 3.25, end + 0.07),
         ),
         (
-            Vec3::new(x - 0.18, 0.55, start - 0.07),
+            Vec3::new(x - 0.18, 0.79, start - 0.07),
             Vec3::new(x + 0.05, 3.14, start + 0.04),
         ),
         (
-            Vec3::new(x - 0.18, 0.55, end - 0.04),
+            Vec3::new(x - 0.18, 0.79, end - 0.04),
             Vec3::new(x + 0.05, 3.14, end + 0.07),
         ),
     ] {
@@ -416,14 +348,14 @@ fn window(
     ] {
         let before = scene.primitives.len();
         for (min, max) in [
-            (Vec3::new(x, 0.57, left), Vec3::new(x + 0.065, 0.64, right)),
+            (Vec3::new(x, 0.81, left), Vec3::new(x + 0.065, 0.88, right)),
             (Vec3::new(x, 3.05, left), Vec3::new(x + 0.065, 3.13, right)),
             (
-                Vec3::new(x, 0.64, left),
+                Vec3::new(x, 0.88, left),
                 Vec3::new(x + 0.065, 3.05, left + 0.06),
             ),
             (
-                Vec3::new(x, 0.64, right - 0.06),
+                Vec3::new(x, 0.88, right - 0.06),
                 Vec3::new(x + 0.065, 3.05, right),
             ),
             (
@@ -433,7 +365,7 @@ fn window(
         ] {
             scene.add_box(min, max, trim);
         }
-        for (bottom, top) in [(0.64, 1.67), (1.72, 3.05)] {
+        for (bottom, top) in [(0.88, 1.67), (1.72, 3.05)] {
             scene.add_box(
                 Vec3::new(x + 0.025, bottom, left + 0.06),
                 Vec3::new(x + 0.031, top, right - 0.06),
@@ -464,7 +396,7 @@ fn window(
     for i in 0..12 {
         let z = start + (end - start) * i as f32 / 11.0;
         scene.add_box(
-            Vec3::new(-4.82, 0.55, z - 0.009),
+            Vec3::new(-4.82, 0.79, z - 0.009),
             Vec3::new(-4.80, 1.03, z + 0.009),
             iron,
         );
@@ -476,7 +408,7 @@ fn folded_curtain(scene: &mut Scene, start: f32, width: f32, material: usize) {
             let point = |u: f32, v: f32| {
                 Vec3::new(
                     -4.08 + 0.06 * (u * TAU * 5.0).sin() + 0.025 * (v * 3.0).sin(),
-                    3.47 - v * 3.12,
+                    3.47 - v * 3.435,
                     start + u * width,
                 )
             };
@@ -508,12 +440,21 @@ fn cylinder(scene: &mut Scene, base: Vec3, radius: f32, height: f32, material: u
     );
 }
 fn lathe(scene: &mut Scene, center: Vec3, profile: &[(f32, f32)], material: usize) {
+    lathe_segments(scene, center, profile, material, 96);
+}
+fn lathe_segments(
+    scene: &mut Scene,
+    center: Vec3,
+    profile: &[(f32, f32)],
+    material: usize,
+    steps: usize,
+) {
     for segment in 0..profile.len() - 1 {
         let (r0, y0) = profile[segment];
         let (r1, y1) = profile[segment + 1];
-        for i in 0..96 {
-            let a = i as f32 * TAU / 96.0;
-            let b = (i + 1) as f32 * TAU / 96.0;
+        for i in 0..steps {
+            let a = i as f32 * TAU / steps as f32;
+            let b = (i + 1) as f32 * TAU / steps as f32;
             let points = [
                 center + Vec3::new(r0 * a.cos(), y0, r0 * a.sin()),
                 center + Vec3::new(r1 * a.cos(), y1, r1 * a.sin()),
@@ -538,10 +479,10 @@ fn lathe(scene: &mut Scene, center: Vec3, profile: &[(f32, f32)], material: usiz
         }
     }
 }
-fn pendant(scene: &mut Scene, center: Vec3, trim: usize, brass: usize, dark: usize) {
+fn pendant(scene: &mut Scene, center: Vec3, trim: usize, brass: usize) {
     cylinder(scene, center + Vec3::Y * 3.76, 0.22, 0.04, trim);
     cylinder(scene, center + Vec3::Y * 3.72, 0.15, 0.04, trim);
-    cylinder(scene, center + Vec3::Y * 2.72, 0.008, 1.0, dark);
+    details::pendant_cord(scene, center, brass);
     lathe(
         scene,
         center,
@@ -579,5 +520,33 @@ fn ellipse(scene: &mut Scene, center: Vec3, width: f32, height: f32, material: u
             [Vec2::ZERO; 3],
             material,
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn curtains_clear_open_casements_and_radiators_fit_below_sills() {
+        let mut scene = Scene::empty(Camera::new(Vec3::Z * 6.0, Vec3::ZERO, 54.0, 1.5, 0.0, 6.0));
+        for (start, end) in [(-3.7, -1.9), (-0.8, 1.0), (2.1, 3.9)] {
+            window(&mut scene, start, end, 0, 1, 2, 3);
+            let window_end = scene.primitives.len();
+            folded_curtain(&mut scene, start - 0.48, 0.36, 4);
+            folded_curtain(&mut scene, end + 0.12, 0.36, 4);
+            // Every cloth triangle is outside the opening, including the rotated frame thickness.
+            for primitive in &scene.primitives[window_end..] {
+                let (lo, hi) = primitive.bounds();
+                assert!(hi.z < start - 0.07 || lo.z > end + 0.07);
+                assert!(lo.y > 0.01);
+            }
+            let before = scene.primitives.len();
+            details::radiator(&mut scene, (start + end) * 0.5, 0, 1, 2);
+            for primitive in &scene.primitives[before..] {
+                assert!(primitive.bounds().1.y < 0.69);
+            }
+            scene.primitives.clear();
+        }
     }
 }

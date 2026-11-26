@@ -221,7 +221,7 @@ fn invalid_settings_and_scenes_are_rejected() {
 #[test]
 fn gpu_records_have_exact_msl_layout() {
     assert_eq!(std::mem::size_of::<Primitive>(), 144);
-    assert_eq!(std::mem::size_of::<Material>(), 80);
+    assert_eq!(std::mem::size_of::<Material>(), 96);
     assert_eq!(std::mem::size_of::<lumen_rs::bvh::Node>(), 48);
     assert_eq!(std::mem::size_of::<lumen_rs::camera::Camera>(), 64);
     assert_eq!(std::mem::size_of::<lumen_rs::scene::Light>(), 16);
@@ -360,7 +360,7 @@ fn texture_wrapping_and_bilinear_filtering_are_consistent() {
 #[test]
 fn detailed_interior_loads_textures_and_has_finite_geometry() {
     let scene = scene::preset("interior", 1.5).unwrap();
-    assert_eq!(scene.textures.descriptors.len(), 4);
+    assert!(scene.textures.descriptors.len() >= 4);
     assert!(scene.primitives.len() > 40000);
     assert!(
         scene
@@ -543,4 +543,98 @@ fn obj_textures_resolve_relative_to_nested_mtl_files() {
             .is_err()
     );
     std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn pbr_maps_preserve_linear_values_and_mirrored_tangent_frames() {
+    let directory = std::env::temp_dir().join(format!("lumen-pbr-test-{}", std::process::id()));
+    std::fs::create_dir_all(directory.join("materials")).unwrap();
+    image::RgbImage::from_pixel(2, 2, image::Rgb([192, 128, 238]))
+        .save(directory.join("materials/normal.png"))
+        .unwrap();
+    image::RgbImage::from_pixel(2, 2, image::Rgb([128, 128, 128]))
+        .save(directory.join("materials/rough.png"))
+        .unwrap();
+    std::fs::write(directory.join("materials/surface.mtl"), "newmtl cloth\nKd 1 1 1\nPr 0.8\nPm 0.5\nnorm normal.png\nmap_Pr rough.png\nmap_Pm rough.png\n").unwrap();
+    std::fs::write(directory.join("mesh.obj"), "mtllib materials/surface.mtl\nv 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nusemtl cloth\nf 1/1 2/2 3/3\n").unwrap();
+    let mut scene = scene::preset("studio", 1.0).unwrap();
+    scene
+        .import_obj(&directory.join("mesh.obj"), Vec3::ZERO, 1.0, 0.0, None)
+        .unwrap();
+    let primitive = scene.primitives.len() - 1;
+    let material = scene.primitives[primitive].info[1] as usize;
+    let hit = lumen_rs::geometry::Hit {
+        t: 1.0,
+        p: Vec3::new(0.2, 0.2, 0.0),
+        normal: Vec3::Z,
+        geometric: Vec3::Z,
+        uv: Vec2::splat(0.2),
+        front: true,
+        primitive,
+        material,
+    };
+    let (mapped, normal) = scene.surface_shading(&hit, Vec3::Z);
+    assert!((mapped.surface[0] - 0.8 * 128.0 / 255.0).abs() < 1e-6);
+    assert!((mapped.surface[1] - 0.5 * 128.0 / 255.0).abs() < 1e-6);
+    assert!(normal.x > 0.4 && normal.z > 0.7);
+    scene.primitives[primitive].uv01[2] = -1.0;
+    let (_, mirrored) = scene.surface_shading(&hit, Vec3::Z);
+    assert!((mirrored.x + normal.x).abs() < 1e-5);
+    assert!((mirrored.z - normal.z).abs() < 1e-5);
+    scene.primitives[primitive].uv01 = [0.0; 4];
+    scene.primitives[primitive].uv2 = [0.0; 4];
+    assert_eq!(scene.surface_shading(&hit, Vec3::Z).1, Vec3::Z);
+    scene.materials[material].maps[0] = u32::MAX;
+    assert!(scene.finish().is_err());
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn alpha_cutouts_reject_camera_and_shadow_hits_without_hiding_the_back_surface() {
+    let mut scene = scene::preset("studio", 1.0).unwrap();
+    scene.primitives.clear();
+    scene.materials.clear();
+    scene.textures = lumen_rs::texture::TextureAtlas {
+        pixels: vec![[0.0; 4], [1.0; 4]],
+        descriptors: vec![[0, 2, 1, 0]],
+    };
+    let background = scene.add_material(Material::matte(Vec3::ONE));
+    let mut mask = Material::matte(Vec3::ONE);
+    mask.maps[3] = 1;
+    mask.detail[3] = 1.0;
+    let masked = scene.add_material(mask);
+    // Back triangles precede the cutout, so a rejected nearer candidate must retain the accepted hit.
+    scene.add_quad(
+        Vec3::new(-1.0, -1.0, -1.0),
+        Vec3::X * 2.0,
+        Vec3::Y * 2.0,
+        background,
+    );
+    scene.add_quad(
+        Vec3::new(-1.0, -1.0, 0.0),
+        Vec3::X * 2.0,
+        Vec3::Y * 2.0,
+        masked,
+    );
+    scene.finish().unwrap();
+    let ray = |x| Ray {
+        origin: Vec3::new(x, 0.0, 1.0),
+        direction: -Vec3::Z,
+    };
+    assert_eq!(
+        scene
+            .intersect(ray(-0.5), f32::INFINITY, false)
+            .unwrap()
+            .material,
+        background
+    );
+    assert_eq!(
+        scene
+            .intersect(ray(0.5), f32::INFINITY, false)
+            .unwrap()
+            .material,
+        masked
+    );
+    assert!(scene.intersect(ray(-0.5), 1.5, true).is_none());
+    assert!(scene.intersect(ray(0.5), 1.5, true).is_some());
 }

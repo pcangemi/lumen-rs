@@ -14,6 +14,8 @@ cargo build --locked --release --bins
 ./target/release/viewer --backend metal --scene interior
 ```
 
+Both rendering executables default to **1920 × 1080 (Full HD)**. Pass `--width` and `--height` to change the resolution.
+
 The optional denoiser installer downloads a checksum-verified Open Image Denoise release into `.runtime/oidn`. It does not install system libraries. The viewer automatically filters complete passes when that runtime is available. Without it, rendering still works and the viewer reports raw mode.
 
 Use `--backend cpu` for CPU rendering, or `--backend auto` to select an accessible Metal device. A restricted process may be unable to enumerate GPUs even when a normal Terminal session can. An explicitly requested Metal render fails clearly if no GPU is accessible.
@@ -31,7 +33,7 @@ The viewer schedules real 64 × 64 rendering tiles in center-first passes. The s
 | Escape | Stop an active render and retain its image |
 | Close window | Cancel and exit |
 
-The clean view updates at selected complete passes; the raw view shows each tile immediately. Denoising never modifies the Monte Carlo accumulators. Pause/cancel responsiveness is bounded by the current tile or synchronous denoising operation. Live timing includes pauses, filtering and UI backpressure.
+The clean view refreshes at complete passes, with at least three seconds between requests after the first preview. Tile outlines stay visible in both views. The footer identifies the current pass and the sample count of the displayed clean snapshot. A separate denoising worker and a bounded queue let rendering continue during filtering; a final filter is completed before reporting COMPLETE. Denoising never modifies the accumulators. Pause/cancel takes effect between tiles; an OIDN call already in progress finishes before its worker exits. Live timing includes preparation, pauses and filtering.
 
 ```bash
 ./target/release/viewer --scene interior --samples 1024 --width 1200 --height 800
@@ -44,7 +46,7 @@ The clean view updates at selected complete passes; the raw view shows each tile
 ```bash
 ./target/release/lumen-rs --list-devices
 ./target/release/lumen-rs --backend metal --scene interior \
-  --width 1600 --height 1066 --samples 1024 --bounces 16 \
+  --width 1920 --height 1080 --samples 1024 --bounces 16 \
   --denoise --exr --output renders/final.png
 ```
 
@@ -57,7 +59,7 @@ Each render writes a PNG and a JSON performance report. `--exr` preserves linear
 - Smooth dielectric transmission, exact dielectric Fresnel, total internal reflection, and Beer–Lambert absorption through up to 16 properly nested closed boundaries.
 - Closed, displaced water meshes with time-dependent waves, refraction and absorption. Water is an optical model, not a fluid solver.
 - A bounded participating medium with homogeneous or procedural cloud density, delta tracking, ratio-tracked shadow transmittance, multiple scattering and a Henyey–Greenstein phase function.
-- Subpixel antialiasing, thin-lens depth of field, linear texture decoding and bilinear sampling.
+- Subpixel antialiasing, thin-lens depth of field, sRGB color decoding, linear data maps, tangent-space normal mapping and bilinear sampling.
 - A flat 16-bin SAH BVH, near-first traversal, early-out shadow rays, stack-based path state, Russian roulette and Rayon parallelism.
 - Native Metal compute with shared scene records and shared-memory image buffers. Offline rendering dispatches full-image batches and avoids intermediate film readbacks; the viewer uses interactive tiles. No per-bounce heap allocations.
 - Optional adaptive sampling, disabled by default because statistical stopping can bias estimates and miss rare bright paths.
@@ -71,11 +73,11 @@ Caustic paths are represented by path tracing, but difficult specular-to-diffuse
 | --- | --- | --- |
 | ![Glass, gold and ceramic](renders/studio.png) | ![Chevron parquet apartment](renders/interior.png) | ![Courtyard and water](renders/outdoor.png) |
 
-The interior contains individual 45-degree Hungarian-point chevron boards, beveled edges, scanned oak, opening glazed casements, jambs, sills, balcony rails, pleated curtains, layered mouldings, upholstered furniture and a shaped brass pendant. The daylight source outside the windows is an area-light approximation; the environment is a gradient.
+The interior contains individual 45-degree Hungarian-point chevron boards, beveled edges, scanned oak, opening glazed casements, jambs, sills, balcony rails, curtains clear of the open casements, layered architraves, cast-iron radiators with valves and feet, a physically displaced pile rug with bound edges and tassels, a braided pendant cable, an imported modern Wayfair sofa, a lamp and a textured plant with opacity-mapped leaves. Imported CC0 armchair, oak-and-stone table, slatted sideboard and tea-set meshes preserve their PBR maps. A shaped brass pendant completes the room. The daylight source outside the windows is an area-light approximation; the environment is a gradient.
 
 The courtyard includes a closed wavy water volume, stone coping, a timber pergola and modeled leaves. The clouds preset demonstrates a procedural scattering volume; it is not a weather simulation or a measured atmospheric model.
 
-Original geometry and the vessel generator are included. The scanned textures are redistributed under CC0; see [asset credits](assets/CREDITS.md).
+Original geometry and the vessel generator are included. The Poly Haven furniture and scanned textures are redistributed under CC0; the Wayfair sofa uses CC BY 4.0; see [asset credits](assets/CREDITS.md).
 
 ## Import and scene files
 
@@ -84,9 +86,9 @@ Original geometry and the vessel generator are included. The scanned textures ar
 ./target/release/lumen-rs --scene-file scenes/glass-study.json --output renders/custom.png
 ```
 
-OBJ import supports triangulation, normals, UVs, diffuse MTL texture maps, scaling, Y rotation and material overrides. Texture paths resolve relative to their MTL file. JSON paths resolve relative to the scene file. Scene units are meters; rotations are degrees. JSON materials support `texture`, `texture_scale` and `texture_strength`. Positive scale uses UVs; negative scale uses world projection.
+OBJ import supports triangulation, normals, UVs, diffuse MTL texture maps, OpenGL normal maps (`norm`), roughness/metallic maps (`map_Pr`/`map_Pm`) and factors (`Pr`/`Pm`), opacity cutouts (`map_d`, threshold 0.5), scaling, Y rotation and material overrides. Texture paths resolve relative to their MTL file. JSON paths resolve relative to the scene file. Scene units are meters; rotations are degrees. Normal maps use the mesh UV tangent frame; mirrored UVs retain their handedness. Data maps are loaded without sRGB decoding. JSON materials support `texture`, `texture_scale` and `texture_strength`. Positive scale uses UVs; negative scale uses world projection.
 
-See [glass](scenes/glass-study.json), [water](scenes/water-study.json), and [fog](scenes/fog-study.json) examples. Glass geometry must be closed and consistently wound. Cameras starting inside glass, arbitrary overlapping dielectric volumes, rough transmission, glTF, normal/roughness maps and mipmaps are not supported yet.
+See [glass](scenes/glass-study.json), [water](scenes/water-study.json), and [fog](scenes/fog-study.json) examples. Glass geometry must be closed and consistently wound. Cameras starting inside glass, arbitrary overlapping dielectric volumes, rough transmission, runtime glTF import, blended opacity, velvet sheen and mipmaps are not supported yet.
 
 ## Validate
 

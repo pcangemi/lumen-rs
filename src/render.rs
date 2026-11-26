@@ -24,8 +24,8 @@ pub struct RenderSettings {
 impl Default for RenderSettings {
     fn default() -> Self {
         Self {
-            width: 960,
-            height: 640,
+            width: 1920,
+            height: 1080,
             samples: 256,
             max_depth: 12,
             seed: 42,
@@ -80,6 +80,9 @@ pub struct RenderStats {
     pub primitives: usize,
     pub bvh_nodes: usize,
     pub bvh_depth: usize,
+    pub texture_count: usize,
+    /// Packed scene data only; excludes render buffers, allocator overhead and GPU copies.
+    pub scene_data_bytes: usize,
     pub invalid_samples: u64,
     pub denoiser: Option<String>,
     pub denoise_seconds: f64,
@@ -173,6 +176,13 @@ pub fn stats(
         primitives: scene.primitives.len(),
         bvh_nodes: scene.bvh.nodes.len(),
         bvh_depth: scene.bvh.depth,
+        texture_count: scene.textures.descriptors.len(),
+        scene_data_bytes: std::mem::size_of_val(scene.primitives.as_slice())
+            + std::mem::size_of_val(scene.bvh.nodes.as_slice())
+            + std::mem::size_of_val(scene.materials.as_slice())
+            + std::mem::size_of_val(scene.lights.as_slice())
+            + std::mem::size_of_val(scene.textures.pixels.as_slice())
+            + std::mem::size_of_val(scene.textures.descriptors.as_slice()),
         invalid_samples,
         denoiser: None,
         denoise_seconds: 0.0,

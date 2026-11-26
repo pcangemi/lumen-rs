@@ -85,6 +85,52 @@ def material(record, textures, vertex_colors):
                 links.new(strength.outputs[0], multiply.inputs[2])
                 color_output = multiply.outputs[0]
             links.new(color_output, shader.inputs['Base Color'])
+    if surface[2] <= 0.5:
+        maps = record.get('maps', [0, 0, 0, 0])
+        for lane, socket, factor in [(0, 'Normal', 1), (1, 'Roughness', surface[0]), (2, 'Metallic', surface[1])]:
+            if not maps[lane]:
+                continue
+            uv = nodes.new('ShaderNodeTexCoord')
+            scale = nodes.new('ShaderNodeVectorMath')
+            scale.operation = 'SCALE'
+            scale.inputs['Scale'].default_value = abs(detail[3])
+            links.new(uv.outputs['UV'], scale.inputs[0])
+            texture = nodes.new('ShaderNodeTexImage')
+            texture.image = textures[maps[lane] - 1]
+            texture.interpolation = 'Linear'
+            texture.extension = 'REPEAT'
+            links.new(scale.outputs[0], texture.inputs['Vector'])
+            if lane == 0:
+                mapped = nodes.new('ShaderNodeNormalMap')
+                links.new(texture.outputs['Color'], mapped.inputs['Color'])
+                links.new(mapped.outputs['Normal'], shader.inputs[socket])
+            else:
+                multiply = nodes.new('ShaderNodeMath')
+                multiply.operation = 'MULTIPLY'
+                multiply.inputs[1].default_value = factor
+                links.new(texture.outputs['Color'], multiply.inputs[0])
+                links.new(multiply.outputs[0], shader.inputs[socket])
+    if surface[2] <= 0.5 and record.get('maps', [0, 0, 0, 0])[3]:
+        uv = nodes.new('ShaderNodeTexCoord')
+        scale = nodes.new('ShaderNodeVectorMath')
+        scale.operation = 'SCALE'
+        scale.inputs['Scale'].default_value = abs(detail[3])
+        links.new(uv.outputs['UV'], scale.inputs[0])
+        mask = nodes.new('ShaderNodeTexImage')
+        mask.image = textures[record['maps'][3] - 1]
+        mask.interpolation = 'Linear'
+        mask.extension = 'REPEAT'
+        links.new(scale.outputs[0], mask.inputs['Vector'])
+        # Lumen accepts values equal to the cutoff: alpha = 1 - (mask < 0.5).
+        threshold = nodes.new('ShaderNodeMath')
+        threshold.operation = 'LESS_THAN'
+        threshold.inputs[1].default_value = 0.5
+        links.new(mask.outputs['Color'], threshold.inputs[0])
+        accepted = nodes.new('ShaderNodeMath')
+        accepted.operation = 'SUBTRACT'
+        accepted.inputs[0].default_value = 1
+        links.new(threshold.outputs[0], accepted.inputs[1])
+        links.new(accepted.outputs[0], shader.inputs['Alpha'])
     links.new(shader.outputs[0], output.inputs['Surface'])
     return result
 

@@ -162,6 +162,7 @@ pub fn load(path: &Path, aspect: f32) -> Result<Scene> {
             "Invalid material parameters (transmission must be 0 or 1)"
         );
         let mut material = Material {
+            maps: [0; 4],
             base: crate::geometry::pack_vec3(Vec3::from(m.color), 0.0),
             surface: [m.roughness, m.metallic, m.transmission, m.ior],
             emission: crate::geometry::pack_vec3(Vec3::from(m.emission), 0.0),

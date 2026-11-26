@@ -1,4 +1,4 @@
-//! Original demonstration scenes; no external assets are downloaded.
+//! Built-in demonstration scenes; bundled assets require no runtime downloads.
 use super::*;
 
 pub fn preset(name: &str, aspect: f32) -> Result<Scene> {

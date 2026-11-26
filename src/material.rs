@@ -17,6 +17,8 @@ pub struct Material {
     pub absorption: [f32; 4],
     // Pattern scale, kind (0 solid, 1 stone, 2 wood, 3 checker), texture index + 1, mapping scale.
     pub detail: [f32; 4],
+    /// Normal, roughness, metallic and opacity texture indices plus one.
+    pub maps: [u32; 4],
 }
 impl Material {
     pub fn matte(color: Vec3) -> Self {
@@ -26,6 +28,7 @@ impl Material {
             surface: [0.65, 0.0, 0.0, 1.5],
             absorption: [0.0; 4],
             detail: [1.0, 0.0, 0.0, 0.0],
+            maps: [0; 4],
         }
     }
     pub fn metal(color: Vec3, roughness: f32) -> Self {

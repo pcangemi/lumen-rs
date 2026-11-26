@@ -131,8 +131,20 @@ impl Bvh {
         &self,
         primitives: &[Primitive],
         ray: Ray,
+        max_t: f32,
+        any: bool,
+    ) -> Option<Hit> {
+        self.intersect_filtered(primitives, ray, max_t, any, |_| true)
+    }
+    /// Reject masked candidates during traversal, retaining the nearest accepted hit.
+    #[inline]
+    pub fn intersect_filtered(
+        &self,
+        primitives: &[Primitive],
+        ray: Ray,
         mut max_t: f32,
         any: bool,
+        accept: impl Fn(&Hit) -> bool,
     ) -> Option<Hit> {
         if self.nodes.is_empty() {
             return None;
@@ -148,7 +160,9 @@ impl Bvh {
             }
             if node.data[1] > 0 {
                 for i in node.data[0]..node.data[0] + node.data[1] {
-                    if let Some(h) = primitives[i as usize].intersect(ray, max_t, i as usize) {
+                    if let Some(h) = primitives[i as usize].intersect(ray, max_t, i as usize)
+                        && accept(&h)
+                    {
                         if any {
                             return Some(h);
                         }

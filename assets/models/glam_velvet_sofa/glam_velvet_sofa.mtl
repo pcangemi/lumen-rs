@@ -1,0 +1,15 @@
+newmtl material_0
+Kd 0.02 0.02 0.02
+Pr 0.4
+Pm 0.0
+
+newmtl material_1
+Kd 1.0 0.8 0.7
+Pr 0.4
+Pm 1
+
+newmtl material_3
+Kd 0.67 0.6 0.48
+Pr 0.7
+Pm 0
+norm 3-normal.png

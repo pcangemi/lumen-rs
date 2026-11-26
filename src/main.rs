@@ -24,9 +24,9 @@ struct Args {
     scene_file: Option<PathBuf>,
     #[arg(long, value_enum, default_value = "auto")]
     backend: Backend,
-    #[arg(long, default_value_t = 960)]
+    #[arg(long, default_value_t = 1920)]
     width: u32,
-    #[arg(long, default_value_t = 640)]
+    #[arg(long, default_value_t = 1080)]
     height: u32,
     #[arg(long, default_value_t = 256)]
     samples: u32,

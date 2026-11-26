@@ -71,6 +71,10 @@ impl Scene {
         );
         for material in &self.materials {
             ensure!(
+                !material.is_light() || material.maps[3] == 0,
+                "Masked emitters are not supported"
+            );
+            ensure!(
                 material
                     .base
                     .iter()
@@ -97,6 +101,15 @@ impl Scene {
                     && material.detail[2].fract() == 0.0
                     && material.detail[2] as usize <= self.textures.descriptors.len(),
                 "Invalid texture index"
+            );
+        }
+        for material in &self.materials {
+            ensure!(
+                material
+                    .maps
+                    .iter()
+                    .all(|&index| index as usize <= self.textures.descriptors.len()),
+                "Invalid surface map index"
             );
         }
         for p in &self.primitives {
@@ -151,6 +164,24 @@ impl Scene {
         }
         Ok(())
     }
+    /// Alpha cutouts apply equally to camera, indirect, shadow and denoising-guide rays.
+    pub fn intersect(
+        &self,
+        ray: crate::geometry::Ray,
+        limit: f32,
+        any: bool,
+    ) -> Option<crate::geometry::Hit> {
+        self.bvh
+            .intersect_filtered(&self.primitives, ray, limit, any, |hit| {
+                let map = self.materials[hit.material].maps[3];
+                map == 0
+                    || self
+                        .textures
+                        .sample(map as usize - 1, self.surface_uv(hit))
+                        .x
+                        >= 0.5
+            })
+    }
     /// Texture colors are decoded to linear RGB before shading.
     pub fn surface_color(&self, hit: &crate::geometry::Hit) -> Vec3 {
         let material = &self.materials[hit.material];
@@ -158,7 +189,16 @@ impl Scene {
         if material.detail[2] < 1.0 {
             return color;
         }
-        let uv = if material.detail[3] >= 0.0 {
+        let uv = self.surface_uv(hit);
+        color
+            * Vec3::ONE.lerp(
+                self.textures.sample(material.detail[2] as usize - 1, uv),
+                material.base[3],
+            )
+    }
+    fn surface_uv(&self, hit: &crate::geometry::Hit) -> Vec2 {
+        let material = &self.materials[hit.material];
+        if material.detail[3] >= 0.0 {
             hit.uv * material.detail[3]
         } else {
             let n = hit.normal.abs();
@@ -170,12 +210,77 @@ impl Scene {
                 Vec2::new(hit.p.x, hit.p.y)
             };
             uv * -material.detail[3]
-        };
-        color
-            * Vec3::ONE.lerp(
-                self.textures.sample(material.detail[2] as usize - 1, uv),
-                material.base[3],
-            )
+        }
+    }
+    /// Evaluate data maps without changing geometric normals or ray offsets.
+    pub fn surface_shading(&self, hit: &crate::geometry::Hit, outgoing: Vec3) -> (Material, Vec3) {
+        let mut material = self.materials[hit.material];
+        let mut normal = hit.normal;
+        if material.is_glass() || material.maps == [0; 4] {
+            return (material, normal);
+        }
+        let uv = self.surface_uv(hit);
+        for (lane, slot) in [(1, 0), (2, 1)] {
+            if material.maps[lane] > 0 {
+                material.surface[slot] *= self
+                    .textures
+                    .sample(material.maps[lane] as usize - 1, uv)
+                    .x
+                    .clamp(0.0, 1.0);
+            }
+        }
+        if material.maps[0] > 0 {
+            let mapped = self.textures.sample(material.maps[0] as usize - 1, uv) * 2.0 - Vec3::ONE;
+            let primitive = &self.primitives[hit.primitive];
+            let frame = if material.detail[3] < 0.0 {
+                let n = hit.normal.abs();
+                Some(if n.y >= n.x && n.y >= n.z {
+                    (Vec3::X, Vec3::Z)
+                } else if n.x > n.z {
+                    (Vec3::Z, Vec3::Y)
+                } else {
+                    (Vec3::X, Vec3::Y)
+                })
+            } else if primitive.info[0] == 1 {
+                let du = Vec2::new(
+                    primitive.uv01[2] - primitive.uv01[0],
+                    primitive.uv01[3] - primitive.uv01[1],
+                );
+                let dv = Vec2::new(
+                    primitive.uv2[0] - primitive.uv01[0],
+                    primitive.uv2[1] - primitive.uv01[1],
+                );
+                let determinant = du.x * dv.y - du.y * dv.x;
+                if determinant.abs() > 1e-10 {
+                    Some((
+                        (unpack_vec3(primitive.p1) * dv.y - unpack_vec3(primitive.p2) * du.y)
+                            / determinant,
+                        (unpack_vec3(primitive.p2) * du.x - unpack_vec3(primitive.p1) * dv.x)
+                            / determinant,
+                    ))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            if let Some((tangent, bitangent)) = frame {
+                let tangent = (tangent - normal * normal.dot(tangent)).normalize_or_zero();
+                let sign = if normal.cross(tangent).dot(bitangent) < 0.0 {
+                    -1.0
+                } else {
+                    1.0
+                };
+                let bitangent = normal.cross(tangent) * sign;
+                let candidate =
+                    (tangent * mapped.x + bitangent * mapped.y + normal * mapped.z.max(0.01))
+                        .normalize_or_zero();
+                if candidate.dot(hit.geometric) > 0.05 && candidate.dot(outgoing) > 0.05 {
+                    normal = candidate;
+                }
+            }
+        }
+        (material, normal)
     }
     pub fn environment(&self, d: Vec3) -> Vec3 {
         self.horizon
@@ -326,6 +431,24 @@ impl Scene {
                     .map_err(|_| tobj::LoadError::OpenFileFailed)?;
                 let (mut materials, names) = tobj::load_mtl(&mtl_path)?;
                 for material in &mut materials {
+                    for key in ["norm", "map_Pr", "map_Pm"] {
+                        if let Some(texture) = material.unknown_param.get_mut(key) {
+                            *texture = mtl_path
+                                .parent()
+                                .unwrap_or(base)
+                                .join(&*texture)
+                                .to_string_lossy()
+                                .into_owned();
+                        }
+                    }
+                    if let Some(texture) = &mut material.dissolve_texture {
+                        *texture = mtl_path
+                            .parent()
+                            .unwrap_or(base)
+                            .join(&*texture)
+                            .to_string_lossy()
+                            .into_owned();
+                    }
                     if let Some(texture) = &material.diffuse_texture {
                         material.diffuse_texture = Some(
                             mtl_path
@@ -361,6 +484,25 @@ impl Scene {
                 let texture_path = path.parent().unwrap_or(Path::new(".")).join(texture);
                 let index = self.textures.load(&texture_path)?;
                 mat = mat.textured(index, 1.0);
+            }
+            if override_material.is_none() {
+                for (lane, key) in [(0, "norm"), (1, "map_Pr"), (2, "map_Pm")] {
+                    if let Some(path) = m.unknown_param.get(key) {
+                        mat.maps[lane] = self.textures.load_data(Path::new(path))? as u32 + 1;
+                    }
+                }
+                if let Some(path) = &m.dissolve_texture {
+                    mat.maps[3] = self.textures.load_data(Path::new(path))? as u32 + 1;
+                }
+                if let Some(value) = m.unknown_param.get("Pr") {
+                    mat.surface[0] = value.parse().context("Invalid MTL roughness")?;
+                }
+                if let Some(value) = m.unknown_param.get("Pm") {
+                    mat.surface[1] = value.parse().context("Invalid MTL metallic")?;
+                }
+                if mat.detail[3] == 0.0 {
+                    mat.detail[3] = 1.0;
+                }
             }
             self.materials.push(mat);
         }

@@ -10,6 +10,7 @@ struct Node {
 };
 struct Material {
     float4 base, emission, surface, absorption, detail;
+    uint4 maps;
 };
 struct Light {
     uint primitive, pad;
@@ -148,8 +149,12 @@ bool primitive_hit(device const Primitive &p, Ray ray, float limit, uint index, 
     hit.material = p.info.y;
     return true;
 }
+float3 texture_sample(device const float4 *texels, device const uint4 *textures, uint index,
+                      float2 uv);
+float2 surface_uv(Material material, Hit hit);
 bool intersect(device const Primitive *p, device const Node *nodes, Ray ray, float limit,
-               bool any_hit, thread Hit &hit) {
+               bool any_hit, thread Hit &hit, device const Material *materials,
+               device const float4 *texels, device const uint4 *textures) {
     uint stack[64];
     uint sp = 1;
     stack[0] = 0;
@@ -160,7 +165,14 @@ bool intersect(device const Primitive *p, device const Node *nodes, Ray ray, flo
             continue;
         if (node.data.y > 0) {
             for (uint i = node.data.x; i < node.data.x + node.data.y; i++) {
-                if (primitive_hit(p[i], ray, limit, i, hit)) {
+                Hit candidate;
+                if (primitive_hit(p[i], ray, limit, i, candidate)) {
+                    Material material = materials[candidate.material];
+                    if (material.maps.w > 0 && texture_sample(texels, textures, material.maps.w - 1,
+                                                              surface_uv(material, candidate))
+                                                       .x < .5f)
+                        continue;
+                    hit = candidate;
                     if (any_hit)
                         return true;
                     found = true;
@@ -175,7 +187,7 @@ bool intersect(device const Primitive *p, device const Node *nodes, Ray ray, flo
     }
     return found;
 }
-float3 base_color(device const Material &m, float3 p) {
+float3 base_color(Material m, float3 p) {
     float3 q = p * m.detail.x;
     float k = 1;
     switch (uint(m.detail.y)) {
@@ -196,8 +208,7 @@ float3 base_color(device const Material &m, float3 p) {
     return m.base.xyz * k;
 }
 float smith(float n, float a2) { return 2 * n / max(n + sqrt(a2 + (1 - a2) * n * n), 1e-10f); }
-float3 eval(device const Material &m, float3 color, float3 n, float3 wo, float3 wi,
-            thread float &pdf) {
+float3 eval(Material m, float3 color, float3 n, float3 wo, float3 wi, thread float &pdf) {
     float nv = max(dot(n, wo), 0.0f), nl = max(dot(n, wi), 0.0f);
     pdf = 0;
     if (nv <= 0 || nl <= 0)
@@ -218,7 +229,7 @@ float3 eval(device const Material &m, float3 color, float3 n, float3 wo, float3 
     return (1 - f) * color * ((1 - m.surface.y) / PI) +
            f * (d * g1 * g2 / max(4 * nv * nl, 1e-12f));
 }
-float3 bsdf_sample(device const Material &m, float3 n, float3 wo, thread uint &rng) {
+float3 bsdf_sample(Material m, float3 n, float3 wo, thread uint &rng) {
     if (random_float(rng) >= .25f + .5f * m.surface.y) {
         float2 d = disk(rng);
         return to_world(float3(d, sqrt(max(0.0f, 1 - dot(d, d)))), n);
@@ -265,7 +276,61 @@ float3 texture_sample(device const float4 *texels, device const uint4 *textures,
                    texture_texel(texels, info, ix + 1, iy + 1), fract(x));
     return mix(a, b, fract(y));
 }
-float3 surface_color(device const Material &material, Hit hit, device const float4 *texels,
+float2 surface_uv(Material material, Hit hit) {
+    if (material.detail.w >= 0)
+        return hit.uv * material.detail.w;
+    float3 n = abs(hit.n);
+    float2 uv = n.y >= n.x && n.y >= n.z ? hit.p.xz : (n.x > n.z ? hit.p.zy : hit.p.xy);
+    return uv * -material.detail.w;
+}
+void surface_shading(thread Material &material, thread Hit &hit, float3 outgoing,
+                     device const Primitive *primitives, device const float4 *texels,
+                     device const uint4 *textures) {
+    if (material.surface.z > .5f || all(material.maps == uint4(0)))
+        return;
+    float2 uv = surface_uv(material, hit);
+    if (material.maps.y > 0)
+        material.surface.x *=
+            clamp(texture_sample(texels, textures, material.maps.y - 1, uv).x, 0.0f, 1.0f);
+    if (material.maps.z > 0)
+        material.surface.y *=
+            clamp(texture_sample(texels, textures, material.maps.z - 1, uv).x, 0.0f, 1.0f);
+    if (material.maps.x == 0)
+        return;
+    float3 mapped = texture_sample(texels, textures, material.maps.x - 1, uv) * 2 - 1;
+    device const Primitive &p = primitives[hit.primitive];
+    float3 t, b;
+    if (material.detail.w < 0) {
+        float3 n = abs(hit.n);
+        if (n.y >= n.x && n.y >= n.z) {
+            t = float3(1, 0, 0);
+            b = float3(0, 0, 1);
+        } else if (n.x > n.z) {
+            t = float3(0, 0, 1);
+            b = float3(0, 1, 0);
+        } else {
+            t = float3(1, 0, 0);
+            b = float3(0, 1, 0);
+        }
+    } else if (p.info.x == 1) {
+        float2 du = p.uv01.zw - p.uv01.xy, dv = p.uv2.xy - p.uv01.xy;
+        float determinant = du.x * dv.y - du.y * dv.x;
+        if (abs(determinant) <= 1e-10f)
+            return;
+        t = (p.p1.xyz * dv.y - p.p2.xyz * du.y) / determinant;
+        b = (p.p2.xyz * du.x - p.p1.xyz * dv.x) / determinant;
+    } else
+        return;
+    t -= hit.n * dot(hit.n, t);
+    if (dot(t, t) < 1e-20f)
+        return;
+    t = normalize(t);
+    b = cross(hit.n, t) * (dot(cross(hit.n, t), b) < 0 ? -1.0f : 1.0f);
+    float3 candidate = normalize(t * mapped.x + b * mapped.y + hit.n * max(mapped.z, .01f));
+    if (dot(candidate, hit.g) > .05f && dot(candidate, outgoing) > .05f)
+        hit.n = candidate;
+}
+float3 surface_color(Material material, Hit hit, device const float4 *texels,
                      device const uint4 *textures) {
     float3 color = base_color(material, hit.p);
     if (material.detail.z < 1)
@@ -383,7 +448,8 @@ float3 sample_phase(Medium medium, float3 forward, thread uint &rng) {
 }
 float3 volume_light(device const Primitive *primitives, device const Node *nodes,
                     device const Material *materials, device const Light *lights,
-                    constant Params &params, float3 position, float3 forward, thread uint &rng) {
+                    constant Params &params, float3 position, float3 forward, thread uint &rng,
+                    device const float4 *texels, device const uint4 *textures) {
     if (params.config.z == 0)
         return float3(0);
     float choice = random_float(rng);
@@ -419,7 +485,8 @@ float3 volume_light(device const Primitive *primitives, device const Node *nodes
     float3 target = offset(light_position, normal, -direction), shadow = target - position;
     Ray ray = {position, normalize(shadow)};
     Hit blocker;
-    if (intersect(primitives, nodes, ray, length(shadow) - 1e-5f, true, blocker))
+    if (intersect(primitives, nodes, ray, length(shadow) - 1e-5f, true, blocker, materials, texels,
+                  textures))
         return float3(0);
     float transmittance = medium_transmittance(params.medium, ray, length(shadow), rng);
     return materials[primitive.info.y].emission.xyz *
@@ -435,15 +502,16 @@ float3 trace(device const Primitive *primitives, device const Node *nodes,
     uint medium_count = 0;
     for (uint depth = 0; depth < params.config.x; depth++) {
         Hit h;
-        bool surface_found = intersect(primitives, nodes, ray, INFINITY, false, h);
+        bool surface_found =
+            intersect(primitives, nodes, ray, INFINITY, false, h, mats, texels, textures);
         float collision = medium_count == 0 ? medium_sample(params.medium, ray,
                                                             surface_found ? h.t : INFINITY, rng)
                                             : -1;
         if (collision >= 0) {
             float3 position = ray.o + collision * ray.d;
             beta *= params.medium.scattering.xyz;
-            radiance +=
-                beta * volume_light(primitives, nodes, mats, lights, params, position, ray.d, rng);
+            radiance += beta * volume_light(primitives, nodes, mats, lights, params, position,
+                                            ray.d, rng, texels, textures);
             float3 direction = sample_phase(params.medium, ray.d, rng);
             prev_pdf = medium_phase(params.medium, dot(ray.d, direction));
             prev_p = position;
@@ -464,7 +532,9 @@ float3 trace(device const Primitive *primitives, device const Node *nodes,
         }
         if (medium_count > 0)
             beta *= exp(-mats[media[medium_count - 1]].absorption.xyz * h.t);
-        device const Material &m = mats[h.material];
+        Material m = mats[h.material];
+        Hit shading_hit = h;
+        surface_shading(m, shading_hit, -ray.d, primitives, texels, textures);
         if (max3(m.emission.xyz) > 0) {
             float weight = 1;
             uint lid = primitives[h.primitive].info.z;
@@ -478,7 +548,7 @@ float3 trace(device const Primitive *primitives, device const Node *nodes,
             radiance += beta * m.emission.xyz * weight;
             break;
         }
-        float3 n = h.n, wo = -ray.d;
+        float3 n = shading_hit.n, wo = -ray.d;
         if (m.surface.z > .5f) {
             float ei = medium_count > 0 ? mats[media[medium_count - 1]].surface.w : 1;
             float et = h.front ? m.surface.w
@@ -538,7 +608,8 @@ float3 trace(device const Primitive *primitives, device const Node *nodes,
                            shadow = end - origin;
                     Ray sr = {origin, normalize(shadow)};
                     Hit blocker;
-                    if (!intersect(primitives, nodes, sr, length(shadow) - 1e-5f, true, blocker))
+                    if (!intersect(primitives, nodes, sr, length(shadow) - 1e-5f, true, blocker,
+                                   mats, texels, textures))
                         radiance += beta *
                                     medium_transmittance(params.medium, sr, length(shadow), rng) *
                                     f * mats[p.info.y].emission.xyz *

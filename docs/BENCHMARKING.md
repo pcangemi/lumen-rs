@@ -52,4 +52,6 @@ Blender's [light-path documentation](https://docs.blender.org/manual/en/latest/r
 
 ## Recorded baseline
 
-The [M1 Pro interior run](VALIDATION.md) completed with three measured candidates per engine. Cycles had both lower total time and lower raw error at that single setting. The report is retained to guide optimization, not as an equal-quality ranking.
+The archived [M1 Pro interior run](VALIDATION.md), using the earlier 55,438-primitive scene, completed with three measured candidates per engine. Cycles had both lower total time and lower raw error at that single setting. The report is retained to guide optimization, not as an equal-quality ranking.
+
+The current interior uses different geometry, materials and framing, including imported furniture, masked foliage and a displaced rug. The archived comparison does not describe its performance. Rebuild and regenerate both snapshots and references before measuring the updated scene.

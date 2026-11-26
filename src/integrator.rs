@@ -19,9 +19,7 @@ pub fn trace(scene: &Scene, mut ray: Ray, rng: &mut Rng, max_depth: u32) -> Vec3
     let mut medium_count = 0usize;
     let mut eta_scale = 1.0f32;
     for depth in 0..max_depth {
-        let surface_hit = scene
-            .bvh
-            .intersect(&scene.primitives, ray, f32::INFINITY, false);
+        let surface_hit = scene.intersect(ray, f32::INFINITY, false);
         let surface_distance = surface_hit.as_ref().map_or(f32::INFINITY, |hit| hit.t);
         if medium_count == 0
             && let Some(medium) = &scene.medium
@@ -56,7 +54,7 @@ pub fn trace(scene: &Scene, mut ray: Ray, rng: &mut Rng, max_depth: u32) -> Vec3
             let absorb = unpack_vec3(scene.materials[media[medium_count - 1]].absorption);
             throughput *= (-absorb * hit.t).exp();
         }
-        let material = &scene.materials[hit.material];
+        let (material, n) = scene.surface_shading(&hit, -ray.direction);
         if material.is_light() {
             let mut weight = 1.0;
             let lid = scene.primitives[hit.primitive].info[2];
@@ -70,7 +68,6 @@ pub fn trace(scene: &Scene, mut ray: Ray, rng: &mut Rng, max_depth: u32) -> Vec3
             radiance += throughput * unpack_vec3(material.emission) * weight;
             break;
         }
-        let n = hit.normal;
         let wo = -ray.direction;
         if material.is_glass() {
             let eta_i = if medium_count > 0 {
@@ -137,11 +134,7 @@ pub fn trace(scene: &Scene, mut ray: Ray, rng: &mut Rng, max_depth: u32) -> Vec3
                         origin,
                         direction: shadow.normalize(),
                     };
-                    if scene
-                        .bvh
-                        .intersect(&scene.primitives, ray, shadow.length() - 1e-5, true)
-                        .is_none()
-                    {
+                    if scene.intersect(ray, shadow.length() - 1e-5, true).is_none() {
                         let emission = unpack_vec3(
                             scene.materials
                                 [scene.primitives[light.primitive as usize].info[1] as usize]
@@ -223,11 +216,7 @@ fn sample_volume_light(
         origin: position,
         direction: shadow.normalize(),
     };
-    if scene
-        .bvh
-        .intersect(&scene.primitives, ray, shadow.length() - 1e-5, true)
-        .is_some()
-    {
+    if scene.intersect(ray, shadow.length() - 1e-5, true).is_some() {
         return Vec3::ZERO;
     }
     let transmittance = medium.transmittance(ray, shadow.length(), rng);

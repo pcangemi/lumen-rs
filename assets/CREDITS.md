@@ -14,3 +14,31 @@ The following scanned base-color textures are distributed under Poly Haven's CC0
 [Poly Haven's license](https://polyhaven.com/license) permits redistribution and commercial use. These source textures retain their CC0 status; the project's MIT license covers its original code and geometry.
 
 Open Image Denoise is an optional external dependency installed by `scripts/setup-denoiser.sh`. Its official release archive retains its license and third-party notices inside `.runtime/oidn`; the binary distribution is not committed to this repository.
+
+## Apartment furniture
+
+These Poly Haven meshes and their 1K base-color, normal, roughness and metallic maps are CC0-1.0:
+
+| Local model | Author | Source |
+| --- | --- | --- |
+| `modern_arm_chair_01` | Vibrant Nordic | [Modern Arm Chair 01](https://polyhaven.com/a/modern_arm_chair_01) |
+| `modern_coffee_table_01` | Amin | [Modern Coffee Table 01](https://polyhaven.com/a/modern_coffee_table_01) |
+| `modern_wooden_cabinet` | Patrik Pangerl | [Modern Wooden Cabinet](https://polyhaven.com/a/modern_wooden_cabinet) |
+| `tea_set_01` | Rico Cilliers, James Ray Cock, Jurita Burger | [Tea Set 01](https://polyhaven.com/a/tea_set_01) |
+
+The rug uses the 1K diffuse, OpenGL normal, roughness and 16-bit displacement maps from [Curly Teddy Natural](https://polyhaven.com/a/curly_teddy_natural), by Rico Cilliers and colormass, under CC0. The displacement map produces actual centimeter-spaced mesh relief and self-shadowing. This remains a surface model rather than a fiber scattering simulation. Local files are `textures/rug-color.jpg`, `textures/rug-normal.jpg`, `textures/rug-roughness.jpg` and `textures/rug-height.png`.
+
+`models/sources.json` pins the original model download URLs and MD5 checksums (published by Poly Haven; locally recorded for the pinned Khronos revision). Models are converted to meters and Y-up coordinates, centered horizontally and grounded at their lowest point. Packed roughness/metallic channels are split into linear scalar PNGs; the original UVs and split normals are retained. No source geometry is subdivided merely to inflate polygon counts.
+
+To reproduce the conversions with Blender installed:
+
+```bash
+python3 scripts/fetch-interior-assets.py
+/Applications/Blender.app/Contents/MacOS/Blender --background --python scripts/prepare-interior-assets.py
+```
+
+The lamp, braided pendant cord, curtain rods, window joinery, radiator sections and rug edge are original procedural project geometry. The Poly Haven furniture remains CC0; the project license covers only its original contributions.
+
+The plant is [Potted Plant 02](https://polyhaven.com/a/potted_plant_02) by Rico Cilliers (CC0), including its leaf color, normal, roughness and opacity maps. Opacity cutouts affect camera, indirect and shadow rays.
+
+The modern sofa is [GlamVelvetSofa](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/GlamVelvetSofa), by Eric Chadwick, copyright 2021 Wayfair, LLC, under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). See [its attribution and modification notice](models/glam_velvet_sofa/NOTICE.md). It is an existing product model with adapted cream upholstery; the renderer does not yet reproduce the original velvet sheen extension.
