@@ -110,6 +110,81 @@ fn sphere_exit_and_triangle_barycentrics() {
     assert!(h.front);
 }
 #[test]
+fn millimeter_spheres_retain_silhouettes_at_room_scale() {
+    let radius = 0.0035;
+    let center = Vec3::new(3.0, 0.04, -2.0);
+    let sphere = Primitive::sphere(center, radius, 0);
+    for direction in [
+        Vec3::X,
+        Vec3::Y,
+        Vec3::Z,
+        Vec3::new(1.0, 2.0, 3.0).normalize(),
+    ] {
+        let tangent = direction.any_orthonormal_vector();
+        for distance in [3.0, 10.0, 30.0] {
+            for offset in [0.0, 0.8, 1.2] {
+                let ray = Ray {
+                    origin: center - direction * distance + tangent * (radius * offset),
+                    direction,
+                };
+                let hit = sphere.intersect(ray, 100.0, 0);
+                if offset > 1.0 {
+                    assert!(hit.is_none(), "Ray outside a wool bead must miss");
+                } else {
+                    let hit = hit.expect("Ray inside a wool bead silhouette must hit");
+                    let expected = distance - radius * (1.0_f32 - offset * offset).sqrt();
+                    assert!((hit.t - expected).abs() < 5e-6);
+                    assert!(hit.uv.is_finite());
+                    assert!((hit.geometric.length() - 1.0).abs() < 1e-5);
+                    assert!(hit.front);
+                }
+            }
+        }
+        let exit = sphere
+            .intersect(
+                Ray {
+                    origin: center,
+                    direction,
+                },
+                1.0,
+                0,
+            )
+            .unwrap();
+        assert!(!exit.front);
+        assert!((exit.t - radius).abs() < 1e-6);
+    }
+}
+
+#[test]
+fn shadow_connections_do_not_hit_a_small_emitter_before_their_endpoint() {
+    use lumen_rs::geometry::offset;
+
+    let emitter = Primitive::sphere(Vec3::new(0.2, 2.533, -1.35), 0.0055, 0);
+    let mut visible_connections = 0;
+    for origin in [Vec3::new(0.2, 0.11, -1.35), Vec3::new(1.0, 0.11, 0.6)] {
+        for sample in 0..4096 {
+            let (point, normal) = emitter.sample(&mut Rng::new(0, sample, 42));
+            let direction = (point - origin).normalize();
+            if normal.dot(-direction) <= 0.0 {
+                continue;
+            }
+            let endpoint = offset(point, normal, -direction);
+            let delta = endpoint - origin;
+            let ray = Ray {
+                origin,
+                direction: delta.normalize(),
+            };
+            assert!(
+                emitter.intersect(ray, delta.length() - 1e-5, 0).is_none(),
+                "A visible bulb must not shadow itself before the sampled endpoint"
+            );
+            visible_connections += 1;
+        }
+    }
+    assert!(visible_connections > 3000);
+}
+
+#[test]
 fn ggx_is_finite_reciprocal_and_does_not_create_energy() {
     let mut rng = Rng::new(8, 9, 10);
     let n = Vec3::Y;
@@ -376,13 +451,31 @@ fn detailed_interior_loads_textures_and_has_finite_geometry() {
                 direction: -Vec3::Y,
             };
             let hit = scene.intersect(ray, 0.1, false).unwrap();
-            raised_pile_hits += usize::from(hit.p.y > 0.042);
+            assert!(hit.p.y < 0.051, "Boucle pile must not become tall spikes");
+            raised_pile_hits += usize::from(hit.p.y > 0.036);
         }
     }
     assert!(
         raised_pile_hits > 20,
         "The open space between the table supports must retain full-height wool: {raised_pile_hits} raised hits"
     );
+    let mut compressed_beads = 0;
+    for primitive in &scene.primitives {
+        if primitive.info[0] != 0 || scene.materials[primitive.info[1] as usize].detail[3] != -7.0 {
+            continue;
+        }
+        let (lo, hi) = primitive.bounds();
+        if lo.z > -1.403_161 || hi.z < -2.196_839 {
+            continue;
+        }
+        for (left, right) in [(-0.299_217, -0.170_528), (1.170_528, 1.299_217)] {
+            if lo.x <= right && hi.x >= left {
+                assert!(hi.y < 0.036, "Compressed yarn must clear the table support");
+                compressed_beads += 1;
+            }
+        }
+    }
+    assert!(compressed_beads > 100);
 }
 
 #[test]

@@ -268,6 +268,19 @@ pub(super) fn wool_rug(scene: &mut Scene, asset_root: &Path) -> Result<()> {
     let normal = scene
         .textures
         .load_data(&asset_root.join("textures/rug-normal.jpg"))?;
+    let [offset, width, height, _] = scene.textures.descriptors[normal];
+    for pixel in &mut scene.textures.pixels
+        [offset as usize..offset as usize + width as usize * height as usize]
+    {
+        let tangent = Vec3::new(
+            (2.0 * pixel[0] - 1.0) * 0.3,
+            (2.0 * pixel[1] - 1.0) * 0.3,
+            2.0 * pixel[2] - 1.0,
+        )
+        .normalize_or_zero();
+        let encoded = tangent * 0.5 + Vec3::splat(0.5);
+        *pixel = [encoded.x, encoded.y, encoded.z, 0.0];
+    }
     let roughness = scene
         .textures
         .load_data(&asset_root.join("textures/rug-roughness.jpg"))?;
@@ -323,7 +336,10 @@ pub(super) fn wool_rug(scene: &mut Scene, asset_root: &Path) -> Result<()> {
         .map(|i| {
             scene.add_material(Material {
                 surface: [0.98, 0.0, 0.0, 1.5],
-                ..Material::matte(Vec3::new(0.73, 0.67, 0.56) * (0.88 + i as f32 * 0.025))
+                maps: scene.materials[wool].maps,
+                ..Material::matte(Vec3::new(0.78, 0.74, 0.65) * (0.95 + i as f32 * 0.014))
+                    .textured(color, -7.0)
+                    .texture_strength(0.3)
             })
         })
         .collect();
@@ -332,21 +348,27 @@ pub(super) fn wool_rug(scene: &mut Scene, asset_root: &Path) -> Result<()> {
         for row in 0..194 {
             let x = -1.994 + (column as f32 + rng.uniform() * 0.7) * 0.01795;
             let z = -2.494 + (row as f32 + rng.uniform() * 0.7) * 0.01795;
-            let pile = rug_pile_height(x, z, 0.022 + rng.uniform() * 0.028);
+            let pile = rug_pile_height(x, z, 0.009 + rng.uniform() * 0.007);
             let angle = rng.uniform() * TAU;
             let direction = Vec3::new(angle.cos(), 0.0, angle.sin());
             let curl = Vec3::new(-direction.z, 0.0, direction.x);
             let root = Vec3::new(x, height(x, z) - 0.003, z);
-            let points: Vec<_> = (0..=4)
-                .map(|i| {
-                    let t = i as f32 / 4.0;
-                    root + direction * ((t - 0.5) * 0.009)
-                        + Vec3::Y * (pile * (t * std::f32::consts::PI).sin())
-                        + curl * (0.005 * (t * TAU).sin())
-                })
-                .collect();
+            let half_width = 0.0055 + rng.uniform() * 0.0015;
+            let radius = 0.0032 + rng.uniform() * 0.0012;
+            let phase = rng.uniform() * TAU;
             let material = yarn[(rng.next_u32() as usize) % yarn.len()];
-            tube(scene, &points, 0.0014 + rng.uniform() * 0.0007, material, 4);
+            // Overlapping analytic beads give the closed cord a rounded silhouette
+            // without the triangle count of tessellated yarn at this scale.
+            for segment in 0..8 {
+                let theta = phase + segment as f32 * TAU / 8.0;
+                let center = root
+                    + direction * (half_width * theta.cos())
+                    + Vec3::Y * (pile * 0.5 * (1.0 + theta.sin()))
+                    + curl * (0.0012 * (2.0 * theta).sin());
+                scene
+                    .primitives
+                    .push(Primitive::sphere(center, radius, material));
+            }
         }
     }
     scene.add_box(
@@ -367,23 +389,6 @@ pub(super) fn wool_rug(scene: &mut Scene, asset_root: &Path) -> Result<()> {
         wool,
         12,
     );
-    // Loose end tassels continue the yarn silhouette beyond the woven backing.
-    for side in [-1.0, 1.0] {
-        for i in 0..270 {
-            let x = -1.98 + i as f32 * 0.0199;
-            let points: Vec<_> = (0..5)
-                .map(|j| {
-                    let t = j as f32 / 4.0;
-                    Vec3::new(
-                        x + 0.003 * (t * 12.0 + i as f32).sin(),
-                        0.025 - 0.009 * t,
-                        (if side < 0.0 { -2.5 } else { 1.0 }) + side * 0.055 * t,
-                    )
-                })
-                .collect();
-            tube(scene, &points, 0.0018, wool, 6);
-        }
-    }
     Ok(())
 }
 

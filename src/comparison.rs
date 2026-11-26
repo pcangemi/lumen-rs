@@ -85,6 +85,7 @@ pub fn export(scene: &Scene, settings: RenderSettings, path: &Path) -> Result<()
             json!({
                 "base": m.base, "surface": m.surface, "emission": m.emission,
                 "absorption": m.absorption, "detail": detail, "maps": m.maps,
+                "world_projection": m.detail[3] < 0.0,
             })
         })
         .collect();
@@ -98,8 +99,9 @@ pub fn export(scene: &Scene, settings: RenderSettings, path: &Path) -> Result<()
         "triangles": triangles, "spheres": spheres, "materials": materials, "textures": textures,
         "differences": [
             "Cycles Principled BSDF approximates Lumen's Lambert plus single-scattering GGX mixture.",
-            "Analytic spheres become tessellated spheres in Cycles.",
+            "Dense opaque sphere groups use native Cycles point clouds; sparse and emissive spheres are tessellated.",
             "Procedural colors are baked at vertices; world projections become UVs and may differ on curved surfaces.",
+            "Point-cloud spheres retain world-projected PBR maps; renderer shading-normal correction may differ.",
             "Glass in Cycles uses its glass shader and absorption; shading-normal behavior may differ.",
             "Compare each renderer to its own high-sample reference before comparing time to quality."
         ]

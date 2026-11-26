@@ -102,7 +102,9 @@ bool primitive_hit(device const Primitive &p, Ray ray, float limit, uint index, 
     float3 outward, shading;
     if (p.info.x == 0) {
         float3 oc = ray.o - p.p0.xyz;
-        float b = dot(oc, ray.d), c = dot(oc, oc) - p.p0.w * p.p0.w, disc = b * b - c;
+        float b = dot(oc, ray.d);
+        float3 perpendicular = oc - ray.d * b;
+        float disc = p.p0.w * p.p0.w - dot(perpendicular, perpendicular);
         if (disc < 0)
             return false;
         float d = sqrt(disc);
@@ -111,7 +113,7 @@ bool primitive_hit(device const Primitive &p, Ray ray, float limit, uint index, 
             t = -b + d;
         if (t <= 1e-5f || t >= limit)
             return false;
-        outward = (ray.o + ray.d * t - p.p0.xyz) / p.p0.w;
+        outward = normalize(oc + ray.d * t);
         shading = outward;
         hit.uv = float2(.5f + atan2(outward.z, outward.x) / (2 * PI), .5f - asin(outward.y) / PI);
     } else {

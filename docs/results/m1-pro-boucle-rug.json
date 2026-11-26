@@ -1,0 +1,75 @@
+{
+  "scope": "Geometry and packed scene storage comparison; shading and geometry changed, so this is not a pixel-equivalence or speed benchmark.",
+  "reference_source_commit": "ac1e242",
+  "scene": "interior",
+  "loops": 58200,
+  "rounded_beads": 465600,
+  "primitives_before": 3241268,
+  "primitives_after": 1818548,
+  "packed_bytes_before": 1283688256,
+  "packed_bytes_after": 1044337120,
+  "packed_bytes_saved": 239351136,
+  "region_render": {
+    "backend": "metal",
+    "device": "Apple M1 Pro",
+    "width": 500,
+    "height": 280,
+    "requested_spp": 128,
+    "average_spp": 128.0,
+    "max_depth": 12,
+    "seed": 42,
+    "adaptive_threshold": 0.0,
+    "render_seconds": 32.5339215,
+    "camera_samples_per_second": 550809.7141010192,
+    "primitives": 1818548,
+    "bvh_nodes": 1108345,
+    "bvh_depth": 31,
+    "texture_count": 43,
+    "scene_data_bytes": 1044337120,
+    "invalid_samples": 0,
+    "denoiser": "Open Image Denoise 2.x / CPU / high",
+    "denoise_seconds": 0.223205583,
+    "gpu_dispatch": {
+      "command_count": 2720,
+      "gpu_seconds": 30.529732333496213,
+      "max_command_seconds": 0.0247802083613351,
+      "max_samples_per_command": 2
+    }
+  },
+  "cycles_import_smoke": {
+    "blender_version": "5.3.0",
+    "sphere_count": 465600,
+    "sphere_objects": 1,
+    "build_seconds": 1.4288333330187015,
+    "render_and_validation_seconds": 0.5186856249929406,
+    "coverage": 0.8599446614583334,
+    "finite": true,
+    "scope": "Synthetic dense-sphere Cycles CPU smoke; not a renderer quality comparison"
+  },
+  "isolated_emitter_visibility": {
+    "radius_m": 0.0055,
+    "center_m": [
+      0.2,
+      2.533,
+      -1.35
+    ],
+    "origins_m": [
+      [
+        0.2,
+        0.11,
+        -1.35
+      ],
+      [
+        1,
+        0.11,
+        0.6
+      ]
+    ],
+    "samples_per_origin": 4096,
+    "visible_connections": 4082,
+    "old_quadratic_false_occlusions": 1470,
+    "closest_approach_false_occlusions": 0,
+    "scope": "Comparison of old quadratic and current intersection against visible sampled endpoints; not a full-scene irradiance measurement.",
+    "regression": "shadow_connections_do_not_hit_a_small_emitter_before_their_endpoint"
+  }
+}

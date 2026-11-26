@@ -5,15 +5,15 @@ Validated on 2026-11-26 with Apple M1 Pro, 10 CPU threads and Blender 5.3.0.
 ## Current automated checks
 
 - Rust formatting and Clippy with warnings denied: passed.
-- Standard release physics suite: 24 passed; two GPU tests are deliberately ignored in this suite.
+- Standard release physics suite: 26 passed; two GPU tests are deliberately ignored in this suite.
 - Metal shader compilation: passed.
 - Metal runtime regressions on the M1 Pro: two passed, covering all five presets, finite samples, exact batch invariance and partial film edges.
 - Night lighting regression: all three lamp emitters are active, the pendant retains its 80 mm bulb envelope, and daylight emitters are absent.
 - All seven public street lamps are active; any projected within the camera field of view are occluded from direct sight.
 - Canvas alignment, architectural clearances and outward wavy-glass boundaries: passed.
-- Downward ray probes beneath the coffee table verify raised wool between its supports.
+- Downward ray probes beneath the coffee table verify raised wool between its supports, bounded pile height and clearance beneath the support rails.
 - Thin diffuse transmission, analytic thin-glass shadow losses and MIS agreement with pure path sampling: passed.
-- Cycles diffuse-transmission and thin-glass material graph construction in Blender 5.3: passed; these are graph checks, not a new full-scene benchmark.
+- Cycles opaque, diffuse-transmission, glass, thin-glass and emission material graph construction in Blender 5.3: passed. A 465,600-sphere native point-cloud CPU smoke render also passed with finite output and 85.99% geometric coverage; this is not a full-scene quality benchmark.
 - Latest published checks are available in the repository's [Actions history](https://github.com/pcangemi/lumen-rs/actions).
 
 The standard suite also covers linear PBR maps, mirrored tangent frames, leaf opacity for camera and shadow rays, relative OBJ texture paths, curtain and radiator clearances, and viewer tile outlines over the clean preview. Optional OIDN and Cycles export checks from the preceding furniture update remain recorded below; they were not rerun for the day/night geometry update.
@@ -24,13 +24,19 @@ The standard suite also covers linear PBR maps, mirrored tangent frames, leaf op
 
 | Scene | CPU | Metal |
 | --- | ---: | ---: |
-| Studio | 777.843 | 777.853 |
-| Interior | 641.695 | 638.566 |
-| Interior night | 205.806 | 206.368 |
-| Outdoor | 845.800 | 845.527 |
-| Clouds | 1222.783 | 1222.789 |
+| Studio | 777.850 | 777.856 |
+| Interior | 668.218 | 666.081 |
+| Interior night | 223.591 | 224.750 |
+| Outdoor | 845.823 | 845.540 |
+| Clouds | 1222.799 | 1222.799 |
 
-Mean luminance differs by less than 0.5% in this run. GPU results are exactly equal across requested batch limits and offline/progressive rendering, including adaptive command sizing. A separate 277 × 71 render checks non-divisible film edges and a 17-sample final partial pass. Statistical CPU/GPU agreement does not establish equality of every path.
+Mean luminance differs by less than 0.6% in this run. GPU results are exactly equal across requested batch limits and offline/progressive rendering, including adaptive command sizing. A separate 277 × 71 render checks non-divisible film edges and a 17-sample final partial pass. Statistical CPU/GPU agreement does not establish equality of every path.
+
+## Small emitter visibility
+
+The earlier sphere quadratic subtracted two scene-scale squared distances. Its cancellation error could falsely classify a ray ending just before a small bulb as intersecting that bulb, suppressing a valid direct-light connection. The CPU and Metal implementations now use the perpendicular distance to the ray's closest approach and normalize the surface normal.
+
+An isolated check sampled a sphere of radius 5.5 mm centered at (0.2, 2.533, -1.35) m from two floor locations. Of 4,082 visible connections, the previous formula falsely reported 1,470 occlusions; the corrected intersection reported zero. This checks a numerical error at the emitter endpoint, independently of the room geometry or sample convergence. The permanent regression asserts that all those visible connections remain clear. Another regression checks millimeter-scale hits, misses and inside exits up to 30 m away.
 
 ## Pendant light reaching the floor
 
@@ -38,17 +44,17 @@ Mean luminance differs by less than 0.5% in this run. GPU results are exactly eq
 
 | Patch | Direct irradiance relative to the patch below the pendant | Fraction remaining after glass and occlusion |
 | --- | ---: | ---: |
-| Rug below pendant | 100.0% | 73.5% |
-| Rug in front of table | 98.8% | 79.5% |
-| Foreground rug | 19.6% | 32.9% |
+| Rug below pendant | 100.0% | 84.9% |
+| Rug in front of table | 98.7% | 91.8% |
+| Foreground rug | 26.1% | 50.6% |
 | Under coffee table | 0.0% | 0.0% |
 | Left parquet | 0.0% | 0.0% |
-| Foreground parquet | 2.1% | 6.4% |
-| Ceiling beside pendant | 55.2% | 23.9% |
+| Foreground parquet | 3.4% | 11.8% |
+| Ceiling beside pendant | 49.1% | 24.5% |
 
 The pendant does illuminate the rug below it. Direct light is much weaker in the foreground, and occluded at the sampled points under the table and on the left parquet. Zero direct light does not imply zero indirect light. These local measurements do not validate the complete image or its wool scattering. Increasing sample count reduces uncertainty; it does not remove geometric shadows or distance falloff.
 
-The same probe traces paired normal-view surface paths with all lights at depth limits of 12 and 50, sharing random numbers until the shorter path ends. Across the six sampled floor patches, increasing the limit adds approximately 0.01–1.1% to estimated luminance. The larger differences are noisy: the patch under the table gains 0.000155 scene luminance with standard error 0.000143. These estimates provide no evidence that a severe loss of long paths explains the dark foreground. The report retains paired standard errors; neither depth is an infinite-depth reference, and these patch views do not replace a full camera-image comparison.
+The same probe traces paired normal-view surface paths with all lights at depth limits of 12 and 50, sharing random numbers until the shorter path ends. Across the six sampled floor patches, increasing the limit adds approximately 0.01–0.13% to estimated luminance. The larger differences are noisy: the patch in front of the table gains 0.0000854 scene luminance with standard error 0.0000778. These estimates provide no evidence that a severe loss of long paths explains the dark foreground. The report retains paired standard errors; neither depth is an infinite-depth reference, and these patch views do not replace a full camera-image comparison.
 
 ## Metal scheduling
 
@@ -62,13 +68,17 @@ An interactive viewer was also running during that earlier daylight run. It comp
 
 ## Images
 
-The facade now reuses the apartment's plaster and linen texture handles. The [deterministic comparison](results/m1-pro-texture-reuse.json) records 45 → 43 atlas entries and 33,587,232 fewer packed scene bytes. Day and night linear EXR files are byte-for-byte identical before and after this change at 73 × 47, 64 samples and eight interactions on CPU. This checks pixel equivalence and storage, not a speedup. The Full HD exports below retain their measured settings and timings from `397a067`, before this allocation-only change.
+The facade now reuses the apartment's plaster and linen texture handles. The [deterministic comparison](results/m1-pro-texture-reuse.json) records 45 → 43 atlas entries and 33,587,232 fewer packed scene bytes. Day and night linear EXR files are byte-for-byte identical before and after this change at 73 × 47, 64 samples and eight interactions on CPU. This checks pixel equivalence and storage, not a speedup. The archived Full HD exports below retain their measured settings and timings from `397a067`, before this allocation-only change and the boucle revision.
 
 The opposite facade contains stone courses, recessed glazed rooms, window profiles, sills, cornices, shutters, railings and downpipes. Seven street lamps sit on a street 7.3 m below the apartment floor. The night region study at 650 × 430 pixels and 128 samples completed with zero invalid samples in 143.69 seconds of transport, with a maximum GPU command time of 35.61 ms. An interactive viewer was also running, so this is a shared-workload observation.
 
 `cargo run --release --example streetlight_probe` identifies reflected paths in two camera regions. The [recorded result](results/m1-pro-streetlight-reflections.json) includes a path at pixel (661, 533): camera → opposite glazing → lantern glass → public lamp at (−5.7, −0.1, −24.3) m. Fifteen of the 68,000 sampled camera rays found such a path. This establishes the geometric origin of a visible highlight; it is not a full-image convergence or radiometric accuracy measurement. The probe follows one reflection and thin-glass transmission, stopping at opaque or solid-refractive surfaces.
 
 An earlier rug generator compressed the entire rectangular footprint of the coffee table. This exposed smoother backing between its legs and created a pale rectangular patch. Compression now follows the two measured support rails, with clearance for each yarn loop and a smooth transition to uncompressed pile. This is a geometry correction; additional samples or filtering could not repair the original patch.
+
+The revised rug replaces the tall, narrow polygonal strands with 58,200 short boucle loops, each formed from eight overlapping rounded beads. Cord radii range from 3.2 to 4.4 mm, and free loop heights from 9 to 16 mm. Wool color, roughness and attenuated normal maps add surface variation. The long fringe is removed. The scene now contains 1,818,548 primitives by day, 43.9% fewer than the preceding version, and uses 239,351,136 fewer packed scene bytes (228.26 MiB). This is a storage and geometry reduction; it is not an equal-quality speed measurement. The [recorded report](results/m1-pro-boucle-rug.json) includes the focused render and Cycles import check.
+
+`/Applications/Blender.app/Contents/MacOS/Blender --background --python scripts/check-cycles-spheres.py` checks the dense-sphere import without generating one object per bead. Native point-cloud spheres keep world-projected color, roughness and normal maps. Shading-normal correction and the BSDF still differ between renderers.
 
 `cargo run --release --example render_region -- interior 860 590 430 240 256 renders/rug-contact.png` traces a region of the Full HD camera at its original pixel scale, saving raw and filtered output for focused inspection. It shifts the camera frustum instead of resizing an image. On macOS it uses native Metal; other platforms use the CPU backend. OIDN is required for the filtered output.
 
@@ -81,7 +91,7 @@ The Full HD exports at source commit `397a067` completed with zero invalid sampl
 | interior | 128 | 617.47 s | 3.41 s | 35.11 ms |
 | interior-night | 256 | 1729.23 s | 2.52 s | 73.20 ms |
 
-The current apartment contains about 3.24 million primitives, including 58,200 curved rug loops, physical interlaced rattan, source lamp fittings, an 80 mm clear bulb envelope, transmitting shades, white timber joinery, connected cables, irregular curtains, balcony scrollwork and a centered public-domain Monet canvas. The lamps are generic existing source models; their emission is scene-tuned rather than calibrated in lumens. Rug loops use the opaque surface BRDF, not a dedicated fiber-scattering model. The source sofa uses an adapted diffuse/GGX fabric material rather than its original velvet sheen shader. These are development previews, not a claim of photographic equivalence or a controlled performance comparison.
+The earlier apartment previews contain about 3.24 million primitives, including 58,200 curved rug loops, physical interlaced rattan, source lamp fittings, an 80 mm clear bulb envelope, transmitting shades, white timber joinery, connected cables, irregular curtains, balcony scrollwork and a centered public-domain Monet canvas. The lamps are generic existing source models; their emission is scene-tuned rather than calibrated in lumens. Rug loops use the opaque surface BRDF, not a dedicated fiber-scattering model. The source sofa uses an adapted diffuse/GGX fabric material rather than its original velvet sheen shader. These are development previews, not a claim of photographic equivalence or a controlled performance comparison.
 
 Studio and courtyard previews retain their earlier CPU renders at 900 × 600 and 256 samples. The cloud study uses 720 × 480, 256 samples and 24 bounces. Raw PNG and EXR files remain local; large raw outputs are excluded from Git.
 

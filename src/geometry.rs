@@ -129,8 +129,10 @@ impl Primitive {
         let (t, outward, mut shading, uv) = if self.info[0] == 0 {
             let oc = ray.origin - unpack_vec3(self.p0);
             let b = oc.dot(ray.direction);
-            let c = oc.length_squared() - self.p0[3] * self.p0[3];
-            let disc = b * b - c;
+            // Closest approach avoids subtracting two scene-scale squared distances
+            // when the sphere is only millimeters wide.
+            let perpendicular = oc - ray.direction * b;
+            let disc = self.p0[3] * self.p0[3] - perpendicular.length_squared();
             if disc < 0.0 {
                 return None;
             }
@@ -142,7 +144,7 @@ impl Primitive {
             if t <= 1e-5 || t >= max_t {
                 return None;
             }
-            let n = (ray.at(t) - unpack_vec3(self.p0)) / self.p0[3];
+            let n = (oc + ray.direction * t).normalize();
             (
                 t,
                 n,
