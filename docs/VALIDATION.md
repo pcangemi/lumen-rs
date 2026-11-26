@@ -29,7 +29,7 @@ The standard suite also covers linear PBR maps, mirrored tangent frames, leaf op
 | Studio | 777.850 | 777.856 |
 | Interior | 668.218 | 666.081 |
 | Interior night | 223.591 | 224.750 |
-| Interior neon | 455.705 | 455.541 |
+| Interior neon | 453.492 | 453.335 |
 | Outdoor | 845.823 | 845.540 |
 | Clouds | 1222.799 | 1222.799 |
 
@@ -41,7 +41,7 @@ The `interior-neon` preset adds wall-mounted LED cornices around all four walls,
 
 The pendant, sofa, table and rug use the large wall panel's centre line. The 2.4 m neon sign is centred above the sideboard. Original italic centre lines retain a level baseline and underline endpoints; crossovers lift toward the room. Separate emitting cores, thin-shell Fresnel glass, electrode fittings, clips and connected wiring form the sign. The glass jacket does not model cylindrical refraction or dispersion. Source intensities are scene-tuned RGB values, not measured lumens.
 
-The library suite covers alignment, level lettering, finite neon geometry, glass transmission and real light visibility. In the current 73 × 47 / 64-sample / eight-bounce check, the neon scene's CPU and Metal luminance sums differ by about 0.04%; Metal images are exactly equal across batching and offline/progressive submission. This validates transport consistency, not photographic fidelity or manufacturing accuracy.
+The library suite covers alignment, level lettering, finite neon geometry, glass transmission and real light visibility. In the current 73 × 47 / 64-sample / eight-bounce check, the neon scene's CPU and Metal luminance sums differ by less than 0.04%; Metal images are exactly equal across batching and offline/progressive submission. This validates transport consistency, not photographic fidelity or manufacturing accuracy.
 
 The antique panes have closed, nonparallel surfaces with submillimeter waviness. Tests verify outward entry/exit surfaces, approximately 6 mm thickness and small but nonzero changes in transmitted ray direction.
 
@@ -53,15 +53,17 @@ The sign-detail image is a 1920 × 1080 preview at 64 samples per pixel and 24 m
 
 The `interior-neon` scene imports the supplied SolidXperts guardian-lion scan as solid clear glass, including its pedestal. The [conversion report](../assets/models/guardian_lion/conversion.json) pins the original archive and output checksums. Local repairs remove detached scan fragments, level the underside and close scan openings. The final mesh has 986,376 triangles, one connected shell and no boundary or nonmanifold edges. The carved surface is not decimated or globally smoothed. Source attribution and its separate CC BY-NC 4.0 license are in the [asset notice](../assets/models/guardian_lion/NOTICE.md).
 
-The scene regression verifies the full 1.40 m height, support level, IOR 1.52 and exact retention of every converted triangle. It checks all rug and sculpture bounds for at least 29 cm of clearance beyond the main rug and clearance from the wall. The separate rug is 1.30 m in diameter, with rounded wool loops compressed beneath the pedestal. Across 243 ray probes on three axes, glass crossings alternate between entry and exit and finish in air. These probes supplement the conversion's topology checks; they do not prove the absence of every possible self-intersection in the scan.
+The sculpture now stands 1.90 m tall including its pedestal, centred at (1.20, 0, 2.20) m, farther into the room. Its separate rug is 1.76 m in diameter to fit the larger pedestal. Yarn spacing and thickness retain their original physical scale, while the compressed support region follows the enlarged base. About 31 cm of parquet separates the two rugs.
+
+The scene regression verifies the full height, support level, IOR 1.52 and exact retention of every converted triangle. It checks all rug and sculpture bounds for at least 29 cm of clearance beyond the main rug and clearance from the wall. Across 243 ray probes on three axes, glass crossings alternate between entry and exit and finish in air. These probes supplement the conversion's topology checks; they do not prove the absence of every possible self-intersection in the scan.
 
 Import formerly discarded small but valid triangles, and a fixed ray/triangle determinant threshold could miss them. Import now uses the existing scene-area tolerance, while CPU and Metal use a relative cancellation threshold for intersection. A CPU regression retains and intersects all faces of tetrahedra at four scales down to 10 micrometers. A separate Metal regression sees an 8-micrometer emissive quad identically to the CPU, with zero invalid samples.
 
-The updated [room preview](../renders/interior-neon.png) uses native Metal at 1920 × 1080, 64 samples per pixel and 50 maximum interactions. It completed with zero invalid samples and no command failure: 399.41 s transport, 1.94 s denoising and 125.66 ms longest GPU command. The scene contains 3,251,826 primitives, 2,017,277 BVH nodes and 43 textures, using 1,297,209,552 packed scene bytes. These timings overlap an active interactive viewer and are not a controlled performance benchmark. Open Image Denoise filters the published copy; the raw PNG and linear EXR remain available locally.
+The updated [room preview](../renders/interior-neon.png) uses native Metal at 1920 × 1080, 64 samples per pixel and 50 maximum interactions. It completed with zero invalid samples and no command failure: 384.64 s transport, 2.14 s denoising and 114.91 ms longest GPU command. The scene contains 3,311,866 primitives, 2,061,337 BVH nodes and 43 textures, using 1,307,970,192 packed scene bytes. These timings overlap an active interactive viewer and are not a controlled performance benchmark. Open Image Denoise filters the published copy; the raw PNG and linear EXR remain available locally.
 
 `cargo run --release --example render_sculpture_detail -- 256` renders a Full HD close-up in the same apartment lighting without removing scene geometry. The material supports Fresnel reflection, refraction, total internal reflection and weak volume absorption. It has no opacity trick, dedicated caustic solver or spectral dispersion. The source scan's weathering remains in the surface geometry; assigning clear glass does not turn its carved surface into optically flat glass.
 
-The published [sculpture close-up](../renders/sculpture-detail.png) also uses 1920 × 1080, 64 samples per pixel and 50 maximum interactions. It completed with zero invalid samples and no command failure: 435.23 s transport, 2.45 s denoising and 129.81 ms longest GPU command. It shares the room preview's complete geometry and textures. An interactive viewer was running during this export as well, so the timing is not a controlled benchmark. These denoised 64-sample images are previews, not convergence references; raw PNG and EXR files are retained locally.
+The published [sculpture close-up](../renders/sculpture-detail.png) also uses 1920 × 1080, 64 samples per pixel and 50 maximum interactions. It completed with zero invalid samples and no command failure: 371.56 s transport, 1.99 s denoising and 111.14 ms longest GPU command. It shares the room preview's complete geometry and textures. An interactive viewer was running during this export as well, so the timing is not a controlled benchmark. These denoised 64-sample images are previews, not convergence references; raw PNG and EXR files are retained locally.
 
 ## Metal throughput with identical pixels
 

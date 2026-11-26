@@ -1,11 +1,11 @@
 //! A full-resolution glass guardian lion on its own round wool display rug.
 use super::*;
 
-const CENTER: Vec3 = Vec3::new(3.55, 0.0, 1.95);
-const HEIGHT: f32 = 1.40;
+const CENTER: Vec3 = Vec3::new(1.20, 0.0, 2.20);
+const HEIGHT: f32 = 1.90;
 const BASE_Y: f32 = 0.024;
 const YAW: f32 = -65.0;
-const RUG_RADIUS: f32 = 0.65;
+const RUG_RADIUS: f32 = 0.88;
 const MODEL: &str = "models/guardian_lion/guardian_lion.obj";
 
 pub(super) fn build(scene: &mut Scene, root: &Path, linen: usize) -> Result<()> {
@@ -68,18 +68,21 @@ fn round_rug(scene: &mut Scene, linen: usize) {
     let mut rng = Rng::new(193, 0, 42);
     // Short, rounded yarn loops provide actual relief. The pile under the
     // pedestal is compressed to its support plane rather than piercing glass.
-    for column in -54..=54 {
-        for row in -54..=54 {
+    let spacing = 0.012;
+    let extent = (RUG_RADIUS / spacing).ceil() as i32;
+    for column in -extent..=extent {
+        for row in -extent..=extent {
             let p = Vec3::new(
-                (column as f32 + rng.uniform() * 0.6) * 0.012,
+                (column as f32 + rng.uniform() * 0.6) * spacing,
                 0.0,
-                (row as f32 + rng.uniform() * 0.6) * 0.012,
+                (row as f32 + rng.uniform() * 0.6) * spacing,
             );
             if p.length() > RUG_RADIUS - 0.018 {
                 continue;
             }
             let local = inverse_rotation * p;
-            let under_base = local.x.abs() < 0.34 && local.z.abs() < 0.48;
+            let under_base =
+                local.x.abs() < HEIGHT * 0.24 + 0.006 && local.z.abs() < HEIGHT * 0.34 + 0.006;
             let top = if under_base {
                 BASE_Y
             } else {

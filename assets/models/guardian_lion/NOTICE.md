@@ -25,7 +25,7 @@ to the scanned object. The archive was supplied by the user from Sketchfab.
 - Converted the coordinate system to Y-up, centered the horizontal bounds,
   grounded the pedestal and normalized the total height to one unit.
 - Replaced the source marble texture with clear solid glass in the scene.
-  The sculpture and its pedestal together measure 1.40 m in the apartment.
+  The sculpture and its pedestal together measure 1.90 m in the apartment.
 
 The carved surface is not decimated or globally smoothed. Source and output
 checksums, mesh counts and repair statistics are recorded in `conversion.json`.

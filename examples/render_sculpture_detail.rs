@@ -23,8 +23,8 @@ fn main() -> Result<()> {
     };
     settings.validate()?;
     let mut scene = scene::preset("interior-neon", 16.0 / 9.0)?;
-    let from = Vec3::new(0.65, 1.08, 3.4);
-    let to = Vec3::new(3.55, 0.75, 1.95);
+    let from = Vec3::new(-2.75, 1.43, 4.18);
+    let to = Vec3::new(1.20, 1.0, 2.20);
     scene.camera = Camera::new(from, to, 38.0, 16.0 / 9.0, 0.0, from.distance(to));
     #[cfg(target_os = "macos")]
     let mut rendered = lumen_rs::metal_backend::render(&scene, settings)?;
