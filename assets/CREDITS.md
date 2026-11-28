@@ -80,3 +80,9 @@ and the pinned conversion report. The original detailed scan is retained with
 local repairs and a leveled pedestal; its marble appearance is replaced with
 solid clear glass. The small round wool rug is original procedural geometry
 using the credited CC0 linen map for subtle yarn variation.
+
+## Incense
+
+The ceramic dish, brass support, incense stick, ash and ember are original
+procedural project geometry. The smoke is an original static procedural
+density field rendered with the engine's participating-medium transport.

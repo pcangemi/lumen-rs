@@ -2,6 +2,7 @@
 mod atmosphere;
 mod details;
 mod exterior;
+mod incense;
 mod joinery;
 mod neon;
 mod sculpture;
@@ -227,6 +228,7 @@ pub fn build(aspect: f32, lighting: Lighting) -> Result<Scene> {
         scene.add_box(Vec3::new(-4.6, 0.0, 9.0), Vec3::new(4.7, 3.8, 9.2), plaster);
         neon::build(&mut scene, trim);
         sculpture::build(&mut scene, &asset_root, linen_texture)?;
+        incense::build(&mut scene)?;
     }
     Ok(scene)
 }

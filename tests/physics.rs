@@ -624,6 +624,126 @@ fn volume_tracking_matches_analytic_and_numerical_transmittance() {
 }
 
 #[test]
+fn incense_tracking_matches_integrated_density_and_stays_bounded() {
+    use lumen_rs::medium::Medium;
+    let source = Vec3::new(0.2, 0.3, -0.1);
+    let height = 0.78;
+    let smoke = Medium::incense(source, height, 75.0).unwrap();
+    assert!(Medium::incense(source, 0.0, 75.0).is_err());
+    assert!(Medium::incense(source, height, f32::NAN).is_err());
+    assert_eq!(smoke.density(source - Vec3::Y * 0.001), 0.0);
+    assert_eq!(smoke.density(source + Vec3::Y * height), 0.0);
+    assert_eq!(smoke.density(source + Vec3::X * height), 0.0);
+    let mut rng = Rng::new(0, 0, 1928);
+    for _ in 0..20000 {
+        let p = source
+            + Vec3::new(
+                (rng.uniform() - 0.5) * 0.56,
+                rng.uniform(),
+                (rng.uniform() - 0.5) * 0.56,
+            ) * height;
+        assert!((0.0..=1.0).contains(&smoke.density(p)));
+    }
+    // Find the strongest horizontal chord at several heights independently of
+    // the procedural centre line, then integrate its extinction numerically.
+    for fraction in [0.02, 0.35, 0.70] {
+        let length = height * 0.56;
+        let steps = 2048;
+        let integrate = |ray: Ray| -> f32 {
+            (0..steps)
+                .map(|i| smoke.density(ray.at((i as f32 + 0.5) * length / steps as f32)))
+                .sum::<f32>()
+                * 75.0
+                * length
+                / steps as f32
+        };
+        let (ray, depth) = (0..129)
+            .map(|i| {
+                let ray = Ray {
+                    origin: source
+                        + Vec3::new(-0.28 + i as f32 * 0.56 / 128.0, fraction, -0.28) * height,
+                    direction: Vec3::Z,
+                };
+                (ray, integrate(ray))
+            })
+            .max_by(|a, b| a.1.total_cmp(&b.1))
+            .unwrap();
+        assert!(
+            depth > 0.02,
+            "The plume must have a continuous visible stem"
+        );
+        let expected = (-depth).exp();
+        let trials = 20000;
+        let estimate: f32 = (0..trials)
+            .map(|_| smoke.transmittance(ray, length, &mut rng))
+            .sum::<f32>()
+            / trials as f32;
+        let escapes = (0..trials)
+            .filter(|_| smoke.sample(ray, length, &mut rng).is_none())
+            .count() as f32
+            / trials as f32;
+        assert!((estimate - expected).abs() < 0.012);
+        assert!((escapes - expected).abs() < 0.012);
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "requires a Metal GPU accessible to the test process"]
+fn metal_incense_attenuation_matches_cpu() {
+    let mut s = scene::preset("studio", 1.5).unwrap();
+    s.primitives.clear();
+    s.sky = Vec3::ZERO;
+    s.horizon = Vec3::ZERO;
+    let light = s.add_material(Material::light(Vec3::ONE));
+    s.add_quad(
+        Vec3::new(-1.0, -1.0, -0.4),
+        Vec3::X * 2.0,
+        Vec3::Y * 2.0,
+        light,
+    );
+    let mut smoke = lumen_rs::medium::Medium::incense(Vec3::ZERO, 0.78, 75.0).unwrap();
+    // Absorption isolates the density field from phase and light sampling.
+    smoke.scattering[..3].fill(0.0);
+    s.medium = Some(smoke);
+    s.camera = lumen_rs::camera::Camera::new(
+        Vec3::new(0.02, 0.25, 0.5),
+        Vec3::new(0.02, 0.25, 0.0),
+        15.0,
+        1.5,
+        0.0,
+        0.5,
+    );
+    s.finish().unwrap();
+    let cfg = RenderSettings {
+        width: 48,
+        height: 32,
+        samples: 512,
+        max_depth: 2,
+        ..Default::default()
+    };
+    let cpu = render::cpu(&s, cfg).unwrap();
+    let gpu = lumen_rs::metal_backend::render(&s, cfg).unwrap();
+    assert_eq!(gpu.stats.invalid_samples, 0);
+    let cpu_loss: f32 = cpu.pixels.iter().map(|p| 1.0 - p.x).sum();
+    let gpu_loss: f32 = gpu.pixels.iter().map(|p| 1.0 - p.x).sum();
+    assert!(cpu_loss > 10.0);
+    assert!((cpu_loss - gpu_loss).abs() / cpu_loss < 0.10);
+    let error: f32 = cpu
+        .pixels
+        .iter()
+        .zip(&gpu.pixels)
+        .map(|(a, b)| (a.x - b.x).abs())
+        .sum::<f32>()
+        / cpu.pixels.len() as f32;
+    assert!(
+        error < 0.015,
+        "Incense CPU/Metal mean absolute error: {error}"
+    );
+    println!("incense: CPU attenuation {cpu_loss:.3}, Metal {gpu_loss:.3}; MAE {error:.6}");
+}
+
+#[test]
 fn small_obj_faces_survive_import_and_intersection() {
     let directory = std::env::temp_dir().join(format!("lumen-small-obj-{}", std::process::id()));
     std::fs::create_dir_all(&directory).unwrap();

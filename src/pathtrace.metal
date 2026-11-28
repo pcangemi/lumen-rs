@@ -449,9 +449,31 @@ float value_noise3(float3 position) {
     }
     return mix(layers[0], layers[1], t.z);
 }
+float incense_density(Medium medium, float3 position) {
+    float3 source = float3(medium.parameters.x, medium.lo.y, medium.parameters.y);
+    float3 local = (position - source) / medium.parameters.z;
+    float t = local.y;
+    if (t < 0 || t >= 1 || abs(local.x) >= .28f || abs(local.z) >= .28f)
+        return 0;
+    float curl = smoothstep(.10f, .60f, t);
+    float x = local.x - (.10f * t + .07f * curl * sin(11 * t));
+    float z = local.z - (.035f * t + .045f * curl * sin(14 * t + .6f));
+    float angle = 10 * t + 1.4f * sin(7 * t);
+    float sine = sin(angle), cosine = cos(angle);
+    float radius = .0032f + .010f * t + .036f * t * t;
+    float u = (cosine * x + sine * z) / radius;
+    float v = (-sine * x + cosine * z) / radius;
+    float core = exp(-2 * (u * u / .36f + v * v));
+    float secondary = .35f * curl * exp(-2 * ((u - .85f) * (u - .85f) / .25f + v * v));
+    float modulation = .75f + .25f * value_noise3(local * float3(45, 18, 45));
+    float fade = 1 - smoothstep(.65f, 1.0f, t);
+    return clamp((core + secondary) * modulation * fade * .85f / (1 + 3 * t), 0.0f, 1.0f);
+}
 float medium_density(Medium medium, float3 position) {
     if (medium.scattering.w == 0)
         return 1;
+    if (medium.scattering.w == 2)
+        return incense_density(medium, position);
     float3 center = (medium.lo.xyz + medium.hi.xyz) * .5f;
     float3 half_size = (medium.hi.xyz - medium.lo.xyz) * .5f;
     float3 q = (position - center) / half_size;

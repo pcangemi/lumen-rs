@@ -15,12 +15,31 @@ pub struct Medium {
     pub min: [f32; 4],
     /// xyz bounds; w is phase anisotropy.
     pub max: [f32; 4],
-    /// RGB single-scattering albedo; w selects heterogeneous cloud density.
+    /// RGB single-scattering albedo; w selects homogeneous (0), cloud (1) or incense (2).
     pub scattering: [f32; 4],
-    /// Noise scale, reserved values.
+    /// Cloud: noise scale. Incense: source x/z, height and reserved value.
     pub parameters: [f32; 4],
 }
 impl Medium {
+    /// A stationary, art-directed smoke plume transported as a participating medium.
+    pub fn incense(source: Vec3, height: f32, extinction: f32) -> Result<Self> {
+        ensure!(
+            source.is_finite() && height.is_finite() && (0.05..=5.0).contains(&height),
+            "Incense height must be in [0.05, 5] meters"
+        );
+        let mut medium = Self::new(
+            source - Vec3::new(0.28, 0.0, 0.28) * height,
+            source + Vec3::new(0.28, 1.0, 0.28) * height,
+            extinction,
+            Vec3::new(0.94, 0.95, 0.97),
+            0.25,
+            0.0,
+        )?;
+        medium.scattering[3] = 2.0;
+        medium.parameters = [source.x, source.z, height, 0.0];
+        Ok(medium)
+    }
+
     pub fn new(
         min: Vec3,
         max: Vec3,
@@ -76,6 +95,9 @@ impl Medium {
         if self.scattering[3] == 0.0 {
             return 1.0;
         }
+        if self.scattering[3] == 2.0 {
+            return self.incense_density(position);
+        }
         let center = (unpack_vec3(self.min) + unpack_vec3(self.max)) * 0.5;
         let half_size = (unpack_vec3(self.max) - unpack_vec3(self.min)) * 0.5;
         let q = (position - center) / half_size;
@@ -95,6 +117,30 @@ impl Medium {
             0.55 * value_noise(p) + 0.3 * value_noise(p * 2.03) + 0.15 * value_noise(p * 4.07);
         let density = ((-shape + 0.7 * (noise - 0.5)) * 7.0).clamp(0.0, 1.0);
         density * density * (3.0 - 2.0 * density)
+    }
+
+    fn incense_density(&self, position: Vec3) -> f32 {
+        let source = Vec3::new(self.parameters[0], self.min[1], self.parameters[1]);
+        let local = (position - source) / self.parameters[2];
+        let t = local.y;
+        if !(0.0..1.0).contains(&t) || local.x.abs() >= 0.28 || local.z.abs() >= 0.28 {
+            return 0.0;
+        }
+        // A quiet rising stem rolls into broad curls. The cross section is a
+        // twisting ribbon with a weaker second wisp, not a stack of solid blobs.
+        let curl = smoothstep(0.10, 0.60, t);
+        let x = local.x - (0.10 * t + 0.07 * curl * (11.0 * t).sin());
+        let z = local.z - (0.035 * t + 0.045 * curl * (14.0 * t + 0.6).sin());
+        let angle = 10.0 * t + 1.4 * (7.0 * t).sin();
+        let (sine, cosine) = angle.sin_cos();
+        let radius = 0.0032 + 0.010 * t + 0.036 * t * t;
+        let u = (cosine * x + sine * z) / radius;
+        let v = (-sine * x + cosine * z) / radius;
+        let core = (-2.0 * (u * u / 0.36 + v * v)).exp();
+        let secondary = 0.35 * curl * (-2.0 * ((u - 0.85).powi(2) / 0.25 + v * v)).exp();
+        let modulation = 0.75 + 0.25 * value_noise(local * Vec3::new(45.0, 18.0, 45.0));
+        let fade = 1.0 - smoothstep(0.65, 1.0, t);
+        ((core + secondary) * modulation * fade * 0.85 / (1.0 + 3.0 * t)).clamp(0.0, 1.0)
     }
     /// Sample a true collision; rejected Poisson events are null collisions.
     pub fn sample(&self, ray: Ray, limit: f32, rng: &mut Rng) -> Option<f32> {
@@ -150,6 +196,10 @@ impl Medium {
             forward,
         )
     }
+}
+fn smoothstep(low: f32, high: f32, value: f32) -> f32 {
+    let t = ((value - low) / (high - low)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 fn value_noise(p: Vec3) -> f32 {
     let cell = p.floor();

@@ -59,7 +59,7 @@ Each render writes a PNG and a JSON performance report. `--exr` preserves linear
 - Smooth dielectric transmission, exact dielectric Fresnel, total internal reflection, and Beer–Lambert absorption through up to 16 properly nested closed boundaries.
 - Thin clear-glass envelopes with Fresnel reflection and straight-through shadow transmission, plus diffuse-transmitting fabric and paper shades. These are thin-surface approximations; solid refractive volumes retain their separate transport model.
 - Closed, displaced water meshes with time-dependent waves, refraction and absorption. Water is an optical model, not a fluid solver.
-- A bounded participating medium with homogeneous or procedural cloud density, delta tracking, ratio-tracked shadow transmittance, multiple scattering and a Henyey–Greenstein phase function.
+- A bounded participating medium with homogeneous fog, procedural clouds or fine incense smoke, delta tracking, ratio-tracked shadow transmittance, multiple scattering and a Henyey–Greenstein phase function.
 - Subpixel antialiasing, thin-lens depth of field, sRGB color decoding, linear data maps, tangent-space normal mapping and bilinear sampling.
 - A flat 16-bin SAH BVH, near-first traversal, early-out shadow rays, stack-based path state, Russian roulette and Rayon parallelism.
 - Native Metal compute with shared scene records and shared-memory image buffers. Both Metal modes use 128 × 128 tiles (16,384 independent paths per full tile), starting at one sample per submission and adjusting batch size from completed GPU timings toward a 20 ms command budget, capped at 16 samples. CPU tiles remain 64 × 64. Offline rendering avoids intermediate film readbacks. No artificial delays or dropped samples; no per-bounce heap allocations.
@@ -148,6 +148,16 @@ cargo run --release --example render_sculpture_detail -- 256
 This writes `renders/sculpture-detail.png` and preserves the raw PNG and linear EXR. Glass caustics still use the existing path tracer; this scene does not add a dedicated caustic solver or spectral dispersion.
 
 ![Clear-glass guardian lion on its separate round wool rug](renders/sculpture-detail.png)
+
+An incense stick sits in a glazed ceramic dish beside the sideboard lamp. Its glowing ember feeds a fine, curling smoke plume that scatters the apartment's actual lighting. The plume is a static procedural density field with a narrow stem, twisting wisps and a soft upper fade. CPU and Metal both use delta tracking for scattering and ratio tracking for shadow attenuation inside a small bounding volume.
+
+```bash
+cargo run --release --example render_incense_detail -- 256
+```
+
+This writes a Full HD close-up to `renders/incense-detail.png`, retaining the raw PNG and linear EXR. The `interior-neon` preset now contains participating media; the existing Cycles comparison exporter reports that volumes are unsupported instead of silently omitting the smoke. The other apartment presets remain available for that comparison.
+
+![Incense smoke illuminated beside the sideboard lamp](renders/incense-detail.png)
 
 The strips use a warm-white RGB tint; source intensity is scene-tuned rather than calibrated in lumens. No postprocessed glow is used to replace light transport. The cornice is an original profile informed by [Orac indirect-lighting guidance](https://www.oracdecor.com/en_ie/faq) and [NOËL & MARQUET installation principles](https://noel-marquet.be/en/faqs/cat4_indirect-lighting), not a manufacturer-certified product replica. Neon construction references include [Krypton Neon component diagrams](https://www.neonshop.com/Tech/specs.html). For the equivalent Blender workflow, see [rounded curve geometry](https://docs.blender.org/manual/en/4.3/modeling/curves/properties/geometry.html) and [Andrew Price's neon tutorial](https://www.blenderguru.com/posts/2019/neon).
 

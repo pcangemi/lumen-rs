@@ -1,14 +1,14 @@
 # Validation record
 
-Validated on 2026-11-26 with Apple M1 Pro, 10 CPU threads and Blender 5.3.0.
+Rust and Metal checks updated on 2026-11-28 with Apple M1 Pro and 10 CPU threads. Blender 5.3.0 checks below are retained from earlier validation runs.
 
 ## Current automated checks
 
 - Rust formatting and Clippy with warnings denied: passed.
 - Release library suite: 10 passed; the optional OIDN test is excluded.
-- Standard release physics suite: 27 passed; four GPU tests are deliberately ignored in this suite.
+- Standard release physics suite: 28 passed; five GPU tests are deliberately ignored in this suite.
 - Metal shader compilation: passed.
-- Metal runtime regressions on the M1 Pro: four passed, covering all six presets, finite samples, exact batch invariance, partial film edges, adaptive stopping and micrometer-scale triangle visibility.
+- Metal runtime regressions on the M1 Pro: five passed, covering all six presets, finite samples, exact batch invariance, partial film edges, adaptive stopping, micrometer-scale triangle visibility and fine smoke attenuation.
 - Viewer cache regressions: passed for changed pixels, exposure, resizing, raw/clean selection and live tile outlines. The optional worker test delivered the final denoised image before completion.
 - Night lighting regression: all three lamp emitters are active, the pendant retains its 80 mm bulb envelope, and daylight emitters are absent.
 - All seven public street lamps are active; any projected within the camera field of view are occluded from direct sight.
@@ -29,7 +29,7 @@ The standard suite also covers linear PBR maps, mirrored tangent frames, leaf op
 | Studio | 777.850 | 777.856 |
 | Interior | 668.218 | 666.081 |
 | Interior night | 223.591 | 224.750 |
-| Interior neon | 453.492 | 453.335 |
+| Interior neon | 454.132 | 453.770 |
 | Outdoor | 845.823 | 845.540 |
 | Clouds | 1222.799 | 1222.799 |
 
@@ -41,13 +41,13 @@ The `interior-neon` preset adds wall-mounted LED cornices around all four walls,
 
 The pendant, sofa, table and rug use the large wall panel's centre line. The 2.4 m neon sign is centred above the sideboard. Original italic centre lines retain a level baseline and underline endpoints; crossovers lift toward the room. Separate emitting cores, thin-shell Fresnel glass, electrode fittings, clips and connected wiring form the sign. The glass jacket does not model cylindrical refraction or dispersion. Source intensities are scene-tuned RGB values, not measured lumens.
 
-The library suite covers alignment, level lettering, finite neon geometry, glass transmission and real light visibility. In the current 73 × 47 / 64-sample / eight-bounce check, the neon scene's CPU and Metal luminance sums differ by less than 0.04%; Metal images are exactly equal across batching and offline/progressive submission. This validates transport consistency, not photographic fidelity or manufacturing accuracy.
+The library suite covers alignment, level lettering, finite neon geometry, glass transmission and real light visibility. In the current 73 × 47 / 64-sample / eight-bounce check, the neon scene's CPU and Metal luminance sums differ by about 0.08%; Metal images are exactly equal across batching and offline/progressive submission. This validates transport consistency, not photographic fidelity or manufacturing accuracy.
 
 The antique panes have closed, nonparallel surfaces with submillimeter waviness. Tests verify outward entry/exit surfaces, approximately 6 mm thickness and small but nonzero changes in transmitted ray direction.
 
 `cargo run --release --example render_neon_detail -- 128` renders a front-on Full HD detail using the same scene and materials, preserving raw and denoised output. The close-up camera sits beyond the pendant envelope; no scene geometry is hidden for that view.
 
-The sign-detail image is a 1920 × 1080 preview at 64 samples per pixel and 24 maximum interactions. It predates the sculpture addition and uses 2,190,074 primitives and 43 textures. It completed with zero invalid samples, no Metal command failure and a longest GPU command of 107.77 ms. Open Image Denoise filters the displayed copy; raw PNG/EXR files are retained locally. The current room preview is recorded with the sculpture below.
+The sign-detail image is a 1920 × 1080 preview at 64 samples per pixel and 24 maximum interactions. It predates the sculpture addition and uses 2,190,074 primitives and 43 textures. It completed with zero invalid samples, no Metal command failure and a longest GPU command of 107.77 ms. Open Image Denoise filters the displayed copy; raw PNG/EXR files are retained locally. The current room preview is recorded with the incense below.
 
 ## Glass guardian lion
 
@@ -59,11 +59,25 @@ The scene regression verifies the full height, support level, IOR 1.52 and exact
 
 Import formerly discarded small but valid triangles, and a fixed ray/triangle determinant threshold could miss them. Import now uses the existing scene-area tolerance, while CPU and Metal use a relative cancellation threshold for intersection. A CPU regression retains and intersects all faces of tetrahedra at four scales down to 10 micrometers. A separate Metal regression sees an 8-micrometer emissive quad identically to the CPU, with zero invalid samples.
 
-The updated [room preview](../renders/interior-neon.png) uses native Metal at 1920 × 1080, 64 samples per pixel and 50 maximum interactions. It completed with zero invalid samples and no command failure: 384.64 s transport, 2.14 s denoising and 114.91 ms longest GPU command. The scene contains 3,311,866 primitives, 2,061,337 BVH nodes and 43 textures, using 1,307,970,192 packed scene bytes. These timings overlap an active interactive viewer and are not a controlled performance benchmark. Open Image Denoise filters the published copy; the raw PNG and linear EXR remain available locally.
+The room preview at `f437881`, before the incense addition, used native Metal at 1920 × 1080, 64 samples per pixel and 50 maximum interactions. It completed with zero invalid samples and no command failure: 384.64 s transport, 2.14 s denoising and 114.91 ms longest GPU command. That scene contained 3,311,866 primitives, 2,061,337 BVH nodes and 43 textures, using 1,307,970,192 packed scene bytes. These timings overlapped an active interactive viewer and are not a controlled performance benchmark. The current room image is recorded with the incense below.
 
 `cargo run --release --example render_sculpture_detail -- 256` renders a Full HD close-up in the same apartment lighting without removing scene geometry. The material supports Fresnel reflection, refraction, total internal reflection and weak volume absorption. It has no opacity trick, dedicated caustic solver or spectral dispersion. The source scan's weathering remains in the surface geometry; assigning clear glass does not turn its carved surface into optically flat glass.
 
-The published [sculpture close-up](../renders/sculpture-detail.png) also uses 1920 × 1080, 64 samples per pixel and 50 maximum interactions. It completed with zero invalid samples and no command failure: 371.56 s transport, 1.99 s denoising and 111.14 ms longest GPU command. It shares the room preview's complete geometry and textures. An interactive viewer was running during this export as well, so the timing is not a controlled benchmark. These denoised 64-sample images are previews, not convergence references; raw PNG and EXR files are retained locally.
+The published [sculpture close-up](../renders/sculpture-detail.png), rendered before the incense addition, uses 1920 × 1080, 64 samples per pixel and 50 maximum interactions. It completed with zero invalid samples and no command failure: 371.56 s transport, 1.99 s denoising and 111.14 ms longest GPU command. It uses that revision's complete geometry and textures. An interactive viewer was running during this export as well, so the timing is not a controlled benchmark. These denoised 64-sample images are previews, not convergence references; raw PNG and EXR files are retained locally.
+
+## Incense volume
+
+The `interior-neon` preset adds an original glazed dish, brass support, coated bamboo stick, ash and a small emitting ember beside the sideboard lamp. A 78 cm plume begins just above its tip. The density field uses a narrow stem that rolls into twisting, widening wisps and fades at the top. Its shape is static and procedural. Scattering albedo, phase anisotropy and extinction are scene-tuned values, not measurements of a particular incense product.
+
+The smoke uses the existing participating-medium integrator for camera paths, indirect paths and shadow attenuation. The implementation retains the 64-byte CPU/Metal medium layout and adds no voxel allocation. Its majorant is 75 inverse meters; density stays in [0, 1]. The [transmittance methods](https://pbr-book.org/4ed/Volume_Scattering/Transmittance) are delta tracking for collision sampling and ratio tracking for shadow connections. The medium's bounding box is 43.68 cm wide and deep, localized above the stick.
+
+The CPU regression checks bounds and density range, then compares 20,000 transmission and escape estimates at three plume heights with independent 2,048-step extinction integrals. Each estimate is within 0.012 absolute transmittance of its numerical reference. The focused Metal regression uses an absorbing plume in front of an emissive background at 48 × 32 and 512 samples. CPU and Metal attenuation sums both report 13.670 and their pixel mean absolute difference reports 0.000000, with zero invalid samples. Whole-scene batch invariance and offline/progressive equivalence also pass.
+
+`cargo run --release --example render_incense_detail -- 256` renders the same apartment lighting at Full HD from a camera facing the stick and lamp. Raw PNG and linear EXR output are preserved alongside the denoised image. Because the comparison exporter does not support participating media, it explicitly rejects this preset instead of dropping the smoke; the other apartment presets are still exportable.
+
+The [incense close-up](../renders/incense-detail.png) completed on native Metal at 1920 × 1080, 128 samples per pixel and 50 maximum interactions, with zero invalid samples and no command failure. Transport took 405.75 s, denoising 2.25 s and the longest GPU command 46.52 ms. The scene has 3,313,317 primitives, 2,062,183 BVH nodes and 43 textures. The addition uses 1,451 extra primitives and 250,144 additional packed scene bytes; the density field requires no voxel storage. This is a preview run, not an isolated throughput or convergence benchmark.
+
+The updated [room preview](../renders/interior-neon.png) uses the same complete scene at 1920 × 1080, 64 samples per pixel and 50 maximum interactions. It completed with zero invalid samples and no command failure: 221.46 s transport, 7.04 s denoising and 66.46 ms longest GPU command. The displayed image is denoised, with the raw PNG and linear EXR retained locally. This single run does not establish a performance change relative to older exports made under different concurrent workloads.
 
 ## Metal throughput with identical pixels
 

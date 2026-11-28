@@ -10,6 +10,8 @@ The renderer owns this immutable scene. Each camera sample has a deterministic r
 
 The native window owns a separate linear image. A worker sends completed tile copies through a channel bounded to four events. Pause and cancellation use atomics checked at tile boundaries. Changing exposure only changes the display transform. Restarting or switching scenes cancels the old worker, drops its receiver, and starts a new job; stale events cannot overwrite the new image.
 
+The 64-byte medium record supports homogeneous fog, procedural clouds and a local incense plume. Its density selector is shared by Rust and Metal. Incense parameters encode the source and height; a twisting, widening ribbon defines a static density field bounded by the extinction majorant. It uses the same delta tracking, ratio tracking, phase sampling and light visibility as the cloud volume. The shape is evaluated only for candidate collisions inside its bounds; it allocates no voxel grid. The comparison exporter rejects participating media until it can preserve their density and transport.
+
 ## Modules
 
 | Module | Responsibility |
@@ -26,9 +28,10 @@ The native window owns a separate linear image. A worker sends completed tile co
 | `scene/apartment/atmosphere` | Sourced lighting, rattan weave, curtains and canvas |
 | `scene/apartment/exterior` | Recessed masonry facade, glazed rooms and public street lighting |
 | `scene/apartment/sculpture` | Licensed glass guardian lion, physical scale and separate round wool rug |
+| `scene/apartment/incense` | Ceramic dish, smouldering incense stick and local smoke volume |
 | `scene/water` | Closed displaced meshes with time-dependent waves |
 | `texture` | Linear atlas and bilinear texture sampling |
-| `medium` | Delta tracking, ratio tracking, cloud density and phase sampling |
+| `medium` | Delta tracking, ratio tracking, cloud and incense density, phase sampling |
 | `denoise` | Optional OIDN C API, surface guides and separate filtered output |
 | `comparison`, `bin/compare` | Scene snapshots and linear image-error measurements |
 | `render` | Offline CPU scheduling, settings, statistics |
