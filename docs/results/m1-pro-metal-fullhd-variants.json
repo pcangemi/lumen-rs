@@ -1,0 +1,292 @@
+{
+  "bounces": 50,
+  "bvh_depth": 31,
+  "device": "Apple M1 Pro",
+  "height": 1080,
+  "primitives": 4705126,
+  "runs": [
+    {
+      "changed_pixels": 0,
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 2160,
+        "gpu_seconds": 47.74580266478006,
+        "max_command_seconds": 0.046490499982610345,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 52.94136,
+      "repeat": 0,
+      "rmse": 0.0,
+      "scene_buffer_bytes": 1681795680,
+      "setup_seconds": 1.329439625,
+      "tuning": {
+        "cached_bounds": false,
+        "command_window": 0,
+        "compact_geometry": false,
+        "compact_nodes": false,
+        "compact_stack": false,
+        "native_traversal": false,
+        "specialize_scene": false,
+        "split_geometry": false,
+        "threadgroup_limit": 0,
+        "wide_bvh": false
+      },
+      "variant": "generic"
+    },
+    {
+      "changed_pixels": 0,
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 2160,
+        "gpu_seconds": 29.07869333808776,
+        "max_command_seconds": 0.0383069165982306,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 31.097063708,
+      "repeat": 0,
+      "rmse": 0.0,
+      "scene_buffer_bytes": 1647354704,
+      "setup_seconds": 2.451778292,
+      "tuning": {
+        "cached_bounds": false,
+        "command_window": 2,
+        "compact_geometry": false,
+        "compact_nodes": false,
+        "compact_stack": false,
+        "native_traversal": false,
+        "specialize_scene": false,
+        "split_geometry": true,
+        "threadgroup_limit": 0,
+        "wide_bvh": true
+      },
+      "variant": "wide-queued"
+    },
+    {
+      "changed_pixels": 0,
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 2160,
+        "gpu_seconds": 28.67008341953624,
+        "max_command_seconds": 0.03223591670393944,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 31.165003583,
+      "repeat": 0,
+      "rmse": 0.0,
+      "scene_buffer_bytes": 1635822304,
+      "setup_seconds": 1.413529584,
+      "tuning": {
+        "cached_bounds": true,
+        "command_window": 2,
+        "compact_geometry": false,
+        "compact_nodes": true,
+        "compact_stack": false,
+        "native_traversal": false,
+        "specialize_scene": false,
+        "split_geometry": true,
+        "threadgroup_limit": 0,
+        "wide_bvh": false
+      },
+      "variant": "layout-queued"
+    },
+    {
+      "changed_pixels": 0,
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 2160,
+        "gpu_seconds": 29.656008001766168,
+        "max_command_seconds": 0.03893458331003785,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 33.135921709,
+      "repeat": 1,
+      "rmse": 0.0,
+      "scene_buffer_bytes": 1635822304,
+      "setup_seconds": 1.6002727079999999,
+      "tuning": {
+        "cached_bounds": true,
+        "command_window": 2,
+        "compact_geometry": false,
+        "compact_nodes": true,
+        "compact_stack": false,
+        "native_traversal": false,
+        "specialize_scene": false,
+        "split_geometry": true,
+        "threadgroup_limit": 0,
+        "wide_bvh": false
+      },
+      "variant": "layout-queued"
+    },
+    {
+      "changed_pixels": 0,
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 2160,
+        "gpu_seconds": 28.86751095368527,
+        "max_command_seconds": 0.02984850003849715,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 34.238132708,
+      "repeat": 1,
+      "rmse": 0.0,
+      "scene_buffer_bytes": 1647354704,
+      "setup_seconds": 3.5610178340000003,
+      "tuning": {
+        "cached_bounds": false,
+        "command_window": 2,
+        "compact_geometry": false,
+        "compact_nodes": false,
+        "compact_stack": false,
+        "native_traversal": false,
+        "specialize_scene": false,
+        "split_geometry": true,
+        "threadgroup_limit": 0,
+        "wide_bvh": true
+      },
+      "variant": "wide-queued"
+    },
+    {
+      "changed_pixels": 0,
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 2160,
+        "gpu_seconds": 47.72710858087521,
+        "max_command_seconds": 0.049848000053316355,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 50.474890125,
+      "repeat": 1,
+      "rmse": 0.0,
+      "scene_buffer_bytes": 1681795680,
+      "setup_seconds": 1.5067025410000001,
+      "tuning": {
+        "cached_bounds": false,
+        "command_window": 0,
+        "compact_geometry": false,
+        "compact_nodes": false,
+        "compact_stack": false,
+        "native_traversal": false,
+        "specialize_scene": false,
+        "split_geometry": false,
+        "threadgroup_limit": 0,
+        "wide_bvh": false
+      },
+      "variant": "generic"
+    },
+    {
+      "changed_pixels": 0,
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 2160,
+        "gpu_seconds": 47.122873210231774,
+        "max_command_seconds": 0.05182241660077125,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 55.5021285,
+      "repeat": 2,
+      "rmse": 0.0,
+      "scene_buffer_bytes": 1681795680,
+      "setup_seconds": 1.105733833,
+      "tuning": {
+        "cached_bounds": false,
+        "command_window": 0,
+        "compact_geometry": false,
+        "compact_nodes": false,
+        "compact_stack": false,
+        "native_traversal": false,
+        "specialize_scene": false,
+        "split_geometry": false,
+        "threadgroup_limit": 0,
+        "wide_bvh": false
+      },
+      "variant": "generic"
+    },
+    {
+      "changed_pixels": 0,
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 2160,
+        "gpu_seconds": 28.154122497537173,
+        "max_command_seconds": 0.030700666597113013,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 30.674814583,
+      "repeat": 2,
+      "rmse": 0.0,
+      "scene_buffer_bytes": 1647354704,
+      "setup_seconds": 1.682347458,
+      "tuning": {
+        "cached_bounds": false,
+        "command_window": 2,
+        "compact_geometry": false,
+        "compact_nodes": false,
+        "compact_stack": false,
+        "native_traversal": false,
+        "specialize_scene": false,
+        "split_geometry": true,
+        "threadgroup_limit": 0,
+        "wide_bvh": true
+      },
+      "variant": "wide-queued"
+    },
+    {
+      "changed_pixels": 0,
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 2160,
+        "gpu_seconds": 30.421249294886366,
+        "max_command_seconds": 0.033073416678234935,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 31.500639375,
+      "repeat": 2,
+      "rmse": 0.0,
+      "scene_buffer_bytes": 1635822304,
+      "setup_seconds": 1.526694,
+      "tuning": {
+        "cached_bounds": true,
+        "command_window": 2,
+        "compact_geometry": false,
+        "compact_nodes": true,
+        "compact_stack": false,
+        "native_traversal": false,
+        "specialize_scene": false,
+        "split_geometry": true,
+        "threadgroup_limit": 0,
+        "wide_bvh": false
+      },
+      "variant": "layout-queued"
+    }
+  ],
+  "samples": 16,
+  "scene": "interior-neon",
+  "width": 1920,
+  "scope": "Full HD, three repeats with reversed ordering, no other renderer or build running. Native traversal was excluded after failing the earlier raw-pixel gate."
+}

@@ -392,6 +392,33 @@ fn metal_matches_cpu_statistics_and_batching() {
         };
         let cpu = render::cpu(&s, cfg).unwrap();
         let gpu = lumen_rs::metal_backend::render(&s, cfg).unwrap();
+        let reference = lumen_rs::metal_backend::MetalRenderer::with_tuning(
+            &s,
+            lumen_rs::metal_backend::MetalTuning::default(),
+        )
+        .unwrap()
+        .render(s.camera, cfg, &Default::default(), false, |_| {})
+        .unwrap();
+        assert_eq!(
+            gpu.pixels, reference.pixels,
+            "Production traversal changed {name} pixels"
+        );
+        let wide = lumen_rs::metal_backend::MetalRenderer::with_tuning(
+            &s,
+            lumen_rs::metal_backend::MetalTuning {
+                split_geometry: true,
+                wide_bvh: true,
+                command_window: 2,
+                ..Default::default()
+            },
+        )
+        .unwrap()
+        .render(s.camera, cfg, &Default::default(), false, |_| {})
+        .unwrap();
+        assert_eq!(
+            wide.pixels, reference.pixels,
+            "Wide traversal changed {name} pixels"
+        );
         let gpu2 =
             lumen_rs::metal_backend::render(&s, RenderSettings { batch: 32, ..cfg }).unwrap();
         let tiled =
@@ -895,6 +922,27 @@ fn metal_preserves_small_triangle_visibility() {
     assert!(cpu.pixels.iter().all(|&p| p == radiance));
     assert_eq!(cpu.pixels, gpu.pixels);
     assert_eq!(gpu.stats.invalid_samples, 0);
+    for tuning in [
+        lumen_rs::metal_backend::MetalTuning {
+            split_geometry: true,
+            wide_bvh: true,
+            ..Default::default()
+        },
+        lumen_rs::metal_backend::MetalTuning {
+            split_geometry: true,
+            native_traversal: true,
+            ..Default::default()
+        },
+    ] {
+        let result = lumen_rs::metal_backend::MetalRenderer::with_tuning(&s, tuning)
+            .unwrap()
+            .render(s.camera, cfg, &Default::default(), false, |_| {})
+            .unwrap();
+        assert_eq!(
+            cpu.pixels, result.pixels,
+            "Tiny geometry changed: {tuning:?}"
+        );
+    }
 }
 
 #[test]
@@ -1306,6 +1354,24 @@ fn metal_resident_camera_reset_preserves_final_pixels() {
     for tuning in [
         MetalTuning::default(),
         MetalTuning {
+            split_geometry: true,
+            compact_nodes: true,
+            cached_bounds: true,
+            ..Default::default()
+        },
+        MetalTuning {
+            split_geometry: true,
+            wide_bvh: true,
+            ..Default::default()
+        },
+        MetalTuning {
+            split_geometry: true,
+            compact_nodes: true,
+            cached_bounds: true,
+            command_window: 2,
+            ..Default::default()
+        },
+        MetalTuning {
             compact_geometry: true,
             ..Default::default()
         },
@@ -1314,12 +1380,14 @@ fn metal_resident_camera_reset_preserves_final_pixels() {
             compact_stack: true,
             compact_geometry: false,
             threadgroup_limit: 128,
+            ..Default::default()
         },
         MetalTuning {
             specialize_scene: true,
             compact_stack: true,
             compact_geometry: false,
             threadgroup_limit: 64,
+            ..Default::default()
         },
     ] {
         let mut renderer = MetalRenderer::with_tuning(&scene, tuning).unwrap();
@@ -1400,4 +1468,53 @@ fn metal_point_preview_preserves_depth_and_camera_orientation() {
     moved.origin[0] += 0.3;
     assert_ne!(pixels, renderer.render(moved, 65, 65, 3).unwrap());
     assert_eq!(pixels, renderer.render(camera, 65, 65, 3).unwrap());
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "requires a native Metal device"]
+fn metal_queued_cancellation_drains_before_camera_reset() {
+    use lumen_rs::{
+        metal_backend::{MetalRenderer, MetalTuning},
+        progressive::RenderControl,
+    };
+    use std::sync::atomic::Ordering;
+    let scene = scene::preset("studio", 1.5).unwrap();
+    let settings = RenderSettings {
+        width: 259,
+        height: 133,
+        samples: 8,
+        max_depth: 8,
+        ..Default::default()
+    };
+    let control = RenderControl {
+        discard_cancelled: true,
+        ..Default::default()
+    };
+    let mut renderer = MetalRenderer::with_tuning(
+        &scene,
+        MetalTuning {
+            split_geometry: true,
+            compact_nodes: true,
+            cached_bounds: true,
+            command_window: 2,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let cancelled = renderer.render(scene.camera, settings, &control, true, |_| {
+        control.cancelled.store(true, Ordering::Relaxed);
+    });
+    assert!(cancelled.is_err());
+    control.cancelled.store(false, Ordering::Relaxed);
+    let recovered = renderer
+        .render(scene.camera, settings, &control, true, |_| {})
+        .unwrap();
+    let reference = MetalRenderer::with_tuning(&scene, MetalTuning::default())
+        .unwrap()
+        .render(scene.camera, settings, &control, false, |_| {})
+        .unwrap();
+    assert_eq!(recovered.pixels, reference.pixels);
+    assert_eq!(recovered.samples, reference.samples);
+    assert_eq!(recovered.stats.invalid_samples, 0);
 }

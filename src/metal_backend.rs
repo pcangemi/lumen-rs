@@ -13,6 +13,13 @@ use metal::*;
 use objc::{msg_send, sel, sel_impl};
 use std::ffi::CStr;
 use std::time::Instant;
+#[path = "metal_layout.rs"]
+mod layout;
+#[path = "metal_native.rs"]
+mod native;
+#[path = "metal_submission.rs"]
+mod submission;
+use layout::Geometry as IntersectionPrimitive;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Params {
@@ -25,17 +32,6 @@ struct Params {
     adaptive: [f32; 4],
     tile: [u32; 4],
     medium: crate::medium::Medium,
-}
-
-/// Intersection tests do not need vertex normals or UV coordinates. Preserve the
-/// original f32 values and primitive order in this compact, read-only GPU stream.
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
-struct IntersectionPrimitive {
-    p0: [f32; 4],
-    p1: [f32; 4],
-    p2: [f32; 4],
-    info: [u32; 4],
 }
 
 fn buffer<T: Pod>(device: &Device, data: &[T]) -> Buffer {
@@ -105,24 +101,50 @@ pub fn render_progressive(
     render_impl(scene, s, control, true, on_tile)
 }
 
-/// Explicit compiler experiments used by the quality-gated Metal benchmark.
+/// Explicit experiments used by the quality-gated Metal benchmark.
+/// Default is the original reference; ordinary rendering uses `production()` instead.
 #[derive(Clone, Copy, Debug, Default, serde::Serialize)]
 pub struct MetalTuning {
     pub specialize_scene: bool,
     pub compact_stack: bool,
     pub compact_geometry: bool,
+    pub split_geometry: bool,
+    pub compact_nodes: bool,
+    pub cached_bounds: bool,
+    /// Experimental: does not pass the apartment exact-pixel gate.
+    pub native_traversal: bool,
+    pub wide_bvh: bool,
+    /// Zero or one submits synchronously; two overlaps independent tile commands.
+    pub command_window: usize,
     /// Zero keeps the compiler default; otherwise constrain its register allocation.
     pub threadgroup_limit: u64,
+}
+
+impl MetalTuning {
+    /// Lossless configuration validated on the M1 Pro at delivery resolution.
+    pub fn production() -> Self {
+        Self {
+            split_geometry: true,
+            compact_nodes: true,
+            cached_bounds: true,
+            command_window: 2,
+            ..Self::default()
+        }
+    }
 }
 
 /// Scene buffers and pipelines stay resident across camera changes.
 /// All methods run on the owning render thread; submissions complete before buffer reuse.
 pub struct MetalRenderer<'a> {
     scene: &'a Scene,
+    command_window: usize,
     device: Device,
     pipeline: ComputePipelineState,
     preview_pipeline: ComputePipelineState,
     queue: CommandQueue,
+    acceleration: Option<AccelerationStructure>,
+    intersections: Option<IntersectionFunctionTable>,
+    preview_intersections: Option<IntersectionFunctionTable>,
     primitives: Buffer,
     geometry: Buffer,
     nodes: Buffer,
@@ -149,14 +171,57 @@ fn render_impl(
 }
 
 impl<'a> MetalRenderer<'a> {
+    /// Capture explicit diagnostic work; this is never enabled during ordinary rendering.
+    pub fn start_capture(&self, path: &std::path::Path) -> Result<()> {
+        let manager = CaptureManager::shared();
+        ensure!(
+            manager.supports_destination(MTLCaptureDestination::GpuTraceDocument),
+            "GPU capture unavailable; launch with MTL_CAPTURE_ENABLED=1"
+        );
+        let descriptor = CaptureDescriptor::new();
+        descriptor.set_capture_command_queue(&self.queue);
+        descriptor.set_destination(MTLCaptureDestination::GpuTraceDocument);
+        let path = std::path::absolute(path)?;
+        ensure!(!path.exists(), "Capture output already exists");
+        descriptor.set_output_url(path);
+        manager
+            .start_capture(&descriptor)
+            .map_err(|e| anyhow!("Metal capture: {e}"))
+    }
+
+    /// Resident GPU scene storage, excluding film, compiler allocations and temporary build scratch.
+    pub fn scene_buffer_bytes(&self) -> u64 {
+        [
+            &self.primitives,
+            &self.geometry,
+            &self.nodes,
+            &self.materials,
+            &self.lights,
+            &self.texels,
+            &self.texture_info,
+        ]
+        .iter()
+        .map(|b| b.length())
+        .sum::<u64>()
+            + self.acceleration.as_ref().map_or(0, |a| a.allocated_size())
+    }
+
     pub fn new(scene: &'a Scene) -> Result<Self> {
-        Self::with_tuning(scene, MetalTuning::default())
+        Self::with_tuning(scene, MetalTuning::production())
     }
 
     pub fn with_tuning(scene: &'a Scene, tuning: MetalTuning) -> Result<Self> {
         ensure!(
+            tuning.command_window <= 2,
+            "At most two commands may be outstanding"
+        );
+        ensure!(
             matches!(tuning.threadgroup_limit, 0 | 32 | 64 | 128 | 256),
             "Unsupported threadgroup limit"
+        );
+        ensure!(
+            !tuning.native_traversal || tuning.split_geometry,
+            "Native traversal requires split geometry"
         );
         objc::rc::autoreleasepool(|| {
             let device =
@@ -164,58 +229,82 @@ impl<'a> MetalRenderer<'a> {
             let options = CompileOptions::new();
             options.set_fast_math_enabled(false);
             // Depth-first binary traversal needs at most one pending sibling per level,
-            // plus the current node. No geometry or traversal order changes.
-            let stack_size = if tuning.compact_stack {
+            // plus the current node. A four-way node adds at most three pending
+            // siblings per two binary levels: depth 60 fits in 128 entries.
+            let stack_size = if tuning.wide_bvh {
+                128
+            } else if tuning.compact_stack {
                 (scene.bvh.depth + 1).next_power_of_two()
             } else {
                 64
             };
             ensure!(
-                stack_size <= 64,
+                scene.bvh.depth <= 60,
                 "BVH exceeds the supported traversal depth"
             );
             let source = format!(
-                "#define LUMEN_BVH_STACK_SIZE {stack_size}\n{}",
+                "#define LUMEN_BVH_STACK_SIZE {stack_size}\n#define LUMEN_WIDE_BVH {}\n#define LUMEN_NATIVE_TRAVERSAL {}\n#define LUMEN_SPLIT_GEOMETRY {}\n#define LUMEN_COMPACT_NODES {}\n#define LUMEN_CACHED_BOUNDS {}\n{}",
+                u8::from(tuning.wide_bvh),
+                u8::from(tuning.native_traversal),
+                u8::from(tuning.split_geometry),
+                u8::from(tuning.compact_nodes),
+                u8::from(tuning.cached_bounds),
                 include_str!("pathtrace.metal")
             );
             let library = device
                 .new_library_with_source(&source, &options)
                 .map_err(|e| anyhow!("Metal shader compilation: {e}"))?;
+            let make_constants = || {
+                let values = FunctionConstantValues::new();
+                let volumes = !tuning.specialize_scene || scene.medium.is_some();
+                let opacity =
+                    !tuning.specialize_scene || scene.materials.iter().any(|m| m.maps[3] > 0);
+                values.set_constant_value_at_index(
+                    (&raw const volumes).cast(),
+                    MTLDataType::Bool,
+                    0,
+                );
+                values.set_constant_value_at_index(
+                    (&raw const opacity).cast(),
+                    MTLDataType::Bool,
+                    1,
+                );
+                let compact_geometry = tuning.compact_geometry;
+                values.set_constant_value_at_index(
+                    (&raw const compact_geometry).cast(),
+                    MTLDataType::Bool,
+                    2,
+                );
+                values
+            };
+            let intersection_function = tuning
+                .native_traversal
+                .then(|| {
+                    library
+                        .get_function("native_intersection", Some(make_constants()))
+                        .map_err(|e| anyhow!("Native intersection: {e}"))
+                })
+                .transpose()?;
             let make_pipeline = |name| -> Result<ComputePipelineState> {
-                let constants = Some({
-                    let values = FunctionConstantValues::new();
-                    let volumes = !tuning.specialize_scene || scene.medium.is_some();
-                    let opacity =
-                        !tuning.specialize_scene || scene.materials.iter().any(|m| m.maps[3] > 0);
-                    values.set_constant_value_at_index(
-                        (&raw const volumes).cast(),
-                        MTLDataType::Bool,
-                        0,
-                    );
-                    values.set_constant_value_at_index(
-                        (&raw const opacity).cast(),
-                        MTLDataType::Bool,
-                        1,
-                    );
-                    let compact_geometry = tuning.compact_geometry;
-                    values.set_constant_value_at_index(
-                        (&raw const compact_geometry).cast(),
-                        MTLDataType::Bool,
-                        2,
-                    );
-                    values
-                });
+                let constants = Some(make_constants());
                 let function = library
                     .get_function(name, constants)
                     .map_err(|e| anyhow!("Kernel {name}: {e}"))?;
-                if tuning.threadgroup_limit == 0 {
+                if tuning.threadgroup_limit == 0 && !tuning.native_traversal {
                     return device
                         .new_compute_pipeline_state_with_function(&function)
                         .map_err(|e| anyhow!("Metal pipeline: {e}"));
                 }
                 let descriptor = ComputePipelineDescriptor::new();
                 descriptor.set_compute_function(Some(&function));
-                descriptor.set_max_total_threads_per_threadgroup(tuning.threadgroup_limit);
+                if tuning.threadgroup_limit > 0 {
+                    descriptor.set_max_total_threads_per_threadgroup(tuning.threadgroup_limit);
+                }
+                if let Some(function) = &intersection_function {
+                    let linked = LinkedFunctions::new();
+                    linked.set_functions(&[function]);
+                    descriptor.set_linked_functions(&linked);
+                }
                 if let Some(buffers) = descriptor.buffers() {
                     for index in [0, 1, 2, 3, 6, 7, 8, 9] {
                         if let Some(buffer) = buffers.object_at(index) {
@@ -227,12 +316,42 @@ impl<'a> MetalRenderer<'a> {
                     .new_compute_pipeline_state(&descriptor)
                     .map_err(|e| anyhow!("Metal pipeline: {e}"))
             };
+            let pipeline = make_pipeline("pathtrace")?;
+            let preview_pipeline = make_pipeline("navigation_preview")?;
+            let intersections = intersection_function
+                .as_ref()
+                .map(|f| native::table(&pipeline, f))
+                .transpose()?;
+            let preview_intersections = intersection_function
+                .as_ref()
+                .map(|f| native::table(&preview_pipeline, f))
+                .transpose()?;
+            let queue = device.new_command_queue();
+            let acceleration = tuning
+                .native_traversal
+                .then(|| native::build(&device, &queue, scene))
+                .transpose()?;
             Ok(Self {
-                pipeline: make_pipeline("pathtrace")?,
-                preview_pipeline: make_pipeline("navigation_preview")?,
-                queue: device.new_command_queue(),
-                primitives: buffer(&device, &scene.primitives),
-                geometry: if tuning.compact_geometry {
+                command_window: tuning.command_window.max(1),
+                pipeline,
+                preview_pipeline,
+                queue,
+                acceleration,
+                intersections,
+                preview_intersections,
+                primitives: if tuning.split_geometry {
+                    buffer(
+                        &device,
+                        &scene
+                            .primitives
+                            .iter()
+                            .map(layout::Attributes::from)
+                            .collect::<Vec<_>>(),
+                    )
+                } else {
+                    buffer(&device, &scene.primitives)
+                },
+                geometry: if tuning.compact_geometry || tuning.split_geometry {
                     let values: Vec<_> = scene
                         .primitives
                         .iter()
@@ -247,7 +366,13 @@ impl<'a> MetalRenderer<'a> {
                 } else {
                     buffer::<IntersectionPrimitive>(&device, &[])
                 },
-                nodes: buffer(&device, &scene.bvh.nodes),
+                nodes: if tuning.wide_bvh {
+                    buffer(&device, &layout::wide_nodes(&scene.bvh.nodes)?)
+                } else if tuning.compact_nodes {
+                    buffer(&device, &layout::compact_nodes(&scene.bvh.nodes)?)
+                } else {
+                    buffer(&device, &scene.bvh.nodes)
+                },
                 materials: buffer(&device, &scene.materials),
                 lights: buffer(&device, &scene.lights),
                 texels: buffer(&device, &scene.textures.pixels),
@@ -340,50 +465,66 @@ impl<'a> MetalRenderer<'a> {
             'passes: while sample < s.samples {
                 let pass_end = s.samples.min(sample + sample_batch);
                 let mut slowest_command: f64 = 0.0;
-                for (tile_index, &tile) in tiles.iter().enumerate() {
+                for (chunk_index, chunk) in tiles.chunks(self.command_window).enumerate() {
                     if !control.wait_until_ready() {
                         break 'passes;
                     }
-                    let params = Params {
-                        camera,
-                        sky: pack_vec3(scene.sky, 0.0),
-                        horizon: pack_vec3(scene.horizon, 0.0),
-                        environment: scene.packed_environment(),
-                        image: [s.width, s.height, sample, pass_end],
-                        config: [
-                            s.max_depth,
-                            s.seed,
-                            scene.lights.len() as u32,
-                            s.min_samples,
-                        ],
-                        adaptive: [s.adaptive, 0.0, 0.0, 0.0],
-                        tile: [tile.x, tile.y, tile.width, tile.height],
-                        medium: scene.medium.unwrap_or_else(crate::medium::Medium::zeroed),
-                    };
-                    let seconds = objc::rc::autoreleasepool(|| -> Result<f64> {
-                        let cb = queue.new_command_buffer();
-                        let encoder = cb.new_compute_command_encoder();
-                        encoder.set_compute_pipeline_state(pipeline);
-                        for (i, b) in [primitives, nodes, materials, lights, film, moments]
-                            .iter()
-                            .enumerate()
-                        {
-                            encoder.set_buffer(i as u64, Some(b), 0);
-                        }
-                        encoder.set_buffer(7, Some(texels), 0);
-                        encoder.set_buffer(8, Some(texture_info), 0);
-                        encoder.set_buffer(9, Some(geometry), 0);
-                        encoder.set_bytes(
-                            6,
-                            std::mem::size_of::<Params>() as u64,
-                            (&params as *const Params).cast(),
-                        );
-                        encoder.dispatch_threads(
-                            MTLSize::new(tile.pixel_count() as u64, 1, 1),
-                            MTLSize::new(threads, 1, 1),
-                        );
-                        encoder.end_encoding();
-                        cb.commit();
+                    let mut pending = submission::SubmittedBatch::new(chunk.len());
+                    for tile in chunk {
+                        let params = Params {
+                            camera,
+                            sky: pack_vec3(scene.sky, 0.0),
+                            horizon: pack_vec3(scene.horizon, 0.0),
+                            environment: scene.packed_environment(),
+                            image: [s.width, s.height, sample, pass_end],
+                            config: [
+                                s.max_depth,
+                                s.seed,
+                                scene.lights.len() as u32,
+                                s.min_samples,
+                            ],
+                            adaptive: [s.adaptive, 0.0, 0.0, 0.0],
+                            tile: [tile.x, tile.y, tile.width, tile.height],
+                            medium: scene.medium.unwrap_or_else(crate::medium::Medium::zeroed),
+                        };
+                        objc::rc::autoreleasepool(|| {
+                            let cb = queue.new_command_buffer();
+                            let encoder = cb.new_compute_command_encoder();
+                            encoder.set_compute_pipeline_state(pipeline);
+                            for (i, b) in [primitives, nodes, materials, lights, film, moments]
+                                .iter()
+                                .enumerate()
+                            {
+                                encoder.set_buffer(i as u64, Some(b), 0);
+                            }
+                            encoder.set_buffer(7, Some(texels), 0);
+                            encoder.set_buffer(8, Some(texture_info), 0);
+                            encoder.set_buffer(9, Some(geometry), 0);
+                            if let Some(acceleration) = &self.acceleration {
+                                encoder.set_acceleration_structure(10, Some(acceleration));
+                                encoder.set_intersection_function_table(
+                                    11,
+                                    self.intersections.as_deref(),
+                                );
+                            }
+                            encoder.set_bytes(
+                                6,
+                                std::mem::size_of::<Params>() as u64,
+                                (&params as *const Params).cast(),
+                            );
+                            encoder.dispatch_threads(
+                                MTLSize::new(tile.pixel_count() as u64, 1, 1),
+                                MTLSize::new(threads, 1, 1),
+                            );
+                            encoder.end_encoding();
+                            cb.commit();
+                            pending.push(cb);
+                        });
+                    }
+                    for (local_index, (tile, cb)) in
+                        chunk.iter().zip(pending.commands()).enumerate()
+                    {
+                        let tile_index = chunk_index * self.command_window + local_index;
                         cb.wait_until_completed();
                         ensure!(
                             cb.status() == MTLCommandBufferStatus::Completed,
@@ -394,42 +535,42 @@ impl<'a> MetalRenderer<'a> {
                             sample,
                             pass_end
                         );
-                        Ok(gpu_seconds(cb))
-                    })?;
-                    slowest_command = slowest_command.max(seconds);
-                    dispatch_stats.command_count += 1;
-                    dispatch_stats.gpu_seconds += seconds;
-                    dispatch_stats.max_command_seconds =
-                        dispatch_stats.max_command_seconds.max(seconds);
-                    dispatch_stats.max_samples_per_command = dispatch_stats
-                        .max_samples_per_command
-                        .max(pass_end - sample);
-                    if !progressive {
-                        continue;
+                        let seconds = gpu_seconds(cb);
+                        slowest_command = slowest_command.max(seconds);
+                        dispatch_stats.command_count += 1;
+                        dispatch_stats.gpu_seconds += seconds;
+                        dispatch_stats.max_command_seconds =
+                            dispatch_stats.max_command_seconds.max(seconds);
+                        dispatch_stats.max_samples_per_command = dispatch_stats
+                            .max_samples_per_command
+                            .max(pass_end - sample);
+                        if !progressive {
+                            continue;
+                        }
+                        let mut pixels = Vec::with_capacity(tile.pixel_count());
+                        for local in 0..tile.pixel_count() {
+                            let index = tile.image_index(local, s.width);
+                            // SAFETY: Only this completed tile is read. Another command may
+                            // write a disjoint tile, so do not borrow the entire film as a slice.
+                            let value =
+                                unsafe { film.contents().cast::<[f32; 4]>().add(index).read() };
+                            let samples = value[3] as u32;
+                            completed_samples += u64::from(samples - previous_samples[index]);
+                            previous_samples[index] = samples;
+                            pixels
+                                .push(Vec3::new(value[0], value[1], value[2]) / value[3].max(1.0));
+                        }
+                        completed_work += tile.pixel_count() as u64 * u64::from(pass_end - sample);
+                        on_tile(TileUpdate {
+                            tile: *tile,
+                            pixels,
+                            completed_samples,
+                            progress: completed_work as f32 / (count as f32 * s.samples as f32),
+                            pass_samples: pass_end,
+                            pass_complete: tile_index + 1 == tiles.len(),
+                            elapsed: start.elapsed(),
+                        });
                     }
-                    // SAFETY: The command buffer has completed, so the shared film is stable.
-                    let values = unsafe {
-                        std::slice::from_raw_parts(film.contents().cast::<[f32; 4]>(), count)
-                    };
-                    let mut pixels = Vec::with_capacity(tile.pixel_count());
-                    for local in 0..tile.pixel_count() {
-                        let index = tile.image_index(local, s.width);
-                        let value = values[index];
-                        let samples = value[3] as u32;
-                        completed_samples += u64::from(samples - previous_samples[index]);
-                        previous_samples[index] = samples;
-                        pixels.push(Vec3::new(value[0], value[1], value[2]) / value[3].max(1.0));
-                    }
-                    completed_work += tile.pixel_count() as u64 * u64::from(pass_end - sample);
-                    on_tile(TileUpdate {
-                        tile,
-                        pixels,
-                        completed_samples,
-                        progress: completed_work as f32 / (count as f32 * s.samples as f32),
-                        pass_samples: pass_end,
-                        pass_complete: tile_index + 1 == tiles.len(),
-                        elapsed: start.elapsed(),
-                    });
                 }
                 // Grow at most twofold; shrink immediately after an expensive pass. Timing
                 // is a scheduling heuristic, not a hard guarantee about future GPU latency.
@@ -507,6 +648,11 @@ impl<'a> MetalRenderer<'a> {
                 let cb = self.queue.new_command_buffer();
                 let encoder = cb.new_compute_command_encoder();
                 encoder.set_compute_pipeline_state(&self.preview_pipeline);
+                if let Some(acceleration) = &self.acceleration {
+                    encoder.set_acceleration_structure(10, Some(acceleration));
+                    encoder
+                        .set_intersection_function_table(11, self.preview_intersections.as_deref());
+                }
                 for (index, resource) in [
                     (0, &self.primitives),
                     (1, &self.nodes),

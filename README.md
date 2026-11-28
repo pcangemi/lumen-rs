@@ -256,7 +256,9 @@ cargo run --release --example benchmark_viewer
 
 The paired Metal benchmark alternates execution order, defaults to Full HD with 16 samples and 50 bounces, and rejects changed scene counts, incomplete sampling or any linear pixel difference. Keep other renders paused. The viewer example measures unchanged-frame CPU drawing separately; its ratio is not a light-transport speedup.
 
-The [M1 Pro validation record](docs/VALIDATION.md#metal-throughput-with-identical-pixels) reports a **2.10× transport speedup** over `9e40a6f` on the complete Full HD night scene at 16 samples and 50 bounces, with exact raw-pixel equality across three paired runs. This is not a measured duration for a complete 2,048-sample render.
+An earlier [M1 Pro validation record](docs/VALIDATION.md#metal-throughput-with-identical-pixels) reports a **2.10× transport speedup** over `9e40a6f` on the complete Full HD night scene at 16 samples and 50 bounces, with exact raw-pixel equality across three paired runs. This is not a measured duration for a complete 2,048-sample render.
+
+The current [lossless Metal traversal pass](docs/metal-performance.md#rebuilt-executable-versus-the-previous-release) enables compact BVH nodes, split geometry and shading data, cached ray bounds and two bounded tile submissions. A direct comparison with the previous build measured **49.87 → 30.97 seconds (1.61× throughput, 37.9% less time)** on the Full HD neon apartment at 16 spp and 50 bounces, with identical linear EXR pixels across three paired runs. Native Metal traversal and a four-way BVH remain explicit experiments.
 
 Camera samples per second are not rays per second. Every sample can trace several path and shadow rays. No result in this repository establishes that Lumen is faster than a production renderer at equal final-image quality.
 

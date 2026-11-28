@@ -29,6 +29,12 @@ fn main() -> anyhow::Result<()> {
         variants: Option<String>,
         #[arg(long, default_value = "renders/metal-tuning.json")]
         output: std::path::PathBuf,
+        /// Capture the first measured render. Set MTL_CAPTURE_ENABLED=1 before launch.
+        #[arg(long)]
+        capture: Option<std::path::PathBuf>,
+        /// Record experimental pixel differences instead of failing the quality gate.
+        #[arg(long)]
+        allow_differences: bool,
     }
     let args = Args::parse();
     ensure!(args.repeats > 0, "At least one repeat is required");
@@ -44,6 +50,72 @@ fn main() -> anyhow::Result<()> {
     let scene = scene::preset(&args.scene, args.width as f32 / args.height as f32)?;
     let variants = [
         ("generic", MetalTuning::default()),
+        ("production", MetalTuning::production()),
+        (
+            "wide-queued",
+            MetalTuning {
+                wide_bvh: true,
+                split_geometry: true,
+                command_window: 2,
+                ..Default::default()
+            },
+        ),
+        (
+            "layout-queued",
+            MetalTuning {
+                split_geometry: true,
+                compact_nodes: true,
+                cached_bounds: true,
+                command_window: 2,
+                ..Default::default()
+            },
+        ),
+        (
+            "wide",
+            MetalTuning {
+                wide_bvh: true,
+                split_geometry: true,
+                ..Default::default()
+            },
+        ),
+        (
+            "native",
+            MetalTuning {
+                native_traversal: true,
+                split_geometry: true,
+                ..Default::default()
+            },
+        ),
+        (
+            "split",
+            MetalTuning {
+                split_geometry: true,
+                ..Default::default()
+            },
+        ),
+        (
+            "compact-nodes",
+            MetalTuning {
+                compact_nodes: true,
+                ..Default::default()
+            },
+        ),
+        (
+            "cached-bounds",
+            MetalTuning {
+                cached_bounds: true,
+                ..Default::default()
+            },
+        ),
+        (
+            "layout",
+            MetalTuning {
+                split_geometry: true,
+                compact_nodes: true,
+                cached_bounds: true,
+                ..Default::default()
+            },
+        ),
         (
             "compact-geometry",
             MetalTuning {
@@ -73,6 +145,7 @@ fn main() -> anyhow::Result<()> {
                 compact_stack: true,
                 compact_geometry: false,
                 threadgroup_limit: 128,
+                ..Default::default()
             },
         ),
         (
@@ -82,6 +155,7 @@ fn main() -> anyhow::Result<()> {
                 compact_stack: true,
                 compact_geometry: false,
                 threadgroup_limit: 64,
+                ..Default::default()
             },
         ),
     ];
@@ -89,9 +163,9 @@ fn main() -> anyhow::Result<()> {
         .iter()
         .enumerate()
         .filter(|(_, (name, _))| {
-            args.variants
-                .as_ref()
-                .is_none_or(|names| names.split(',').any(|n| n == *name))
+            args.variants.as_ref().map_or(*name != "native", |names| {
+                names.split(',').any(|n| n == *name)
+            })
         })
         .map(|(index, _)| index)
         .collect();
@@ -113,6 +187,7 @@ fn main() -> anyhow::Result<()> {
             let start = Instant::now();
             let mut renderer = MetalRenderer::with_tuning(&scene, tuning)?;
             let setup_seconds = start.elapsed().as_secs_f64();
+            let scene_buffer_bytes = renderer.scene_buffer_bytes();
             // Warm the pipeline and resident buffers without including that pass in timings.
             renderer.render(
                 scene.camera,
@@ -126,7 +201,15 @@ fn main() -> anyhow::Result<()> {
                 false,
                 |_| {},
             )?;
-            let result = renderer.render(scene.camera, settings, &control, false, |_| {})?;
+            let capture = args.capture.as_ref().filter(|_| records.is_empty());
+            if let Some(path) = capture {
+                renderer.start_capture(path)?;
+            }
+            let rendered = renderer.render(scene.camera, settings, &control, false, |_| {});
+            if capture.is_some() {
+                metal::CaptureManager::shared().stop_capture();
+            }
+            let result = rendered?;
             ensure!(
                 result.stats.invalid_samples == 0
                     && result.samples.iter().all(|&s| s == settings.samples),
@@ -140,12 +223,25 @@ fn main() -> anyhow::Result<()> {
                 .map(|(a, b)| (*a - *b).abs().max_element())
                 .fold(0.0f32, f32::max);
             let exact = result.pixels == *expected;
+            let changed_pixels = result
+                .pixels
+                .iter()
+                .zip(expected.iter())
+                .filter(|(a, b)| a != b)
+                .count();
+            let squared_error: f64 = result
+                .pixels
+                .iter()
+                .zip(expected.iter())
+                .map(|(a, b)| f64::from((*a - *b).length_squared()))
+                .sum();
+            let rmse = (squared_error / (3 * expected.len()) as f64).sqrt();
             println!(
                 "{name} repeat {repeat}: {:.3}s; exact={exact}; max difference={max_difference:.9}",
                 result.stats.render_seconds
             );
             records.push(serde_json::json!({"variant": name, "repeat": repeat, "tuning": tuning, "setup_seconds": setup_seconds,
-                "render_seconds": result.stats.render_seconds, "gpu": result.stats.gpu_dispatch, "exact_pixels": exact, "max_difference": max_difference}));
+                "scene_buffer_bytes": scene_buffer_bytes, "changed_pixels": changed_pixels, "rmse": rmse, "render_seconds": result.stats.render_seconds, "gpu": result.stats.gpu_dispatch, "exact_pixels": exact, "max_difference": max_difference}));
             std::fs::create_dir_all(args.output.parent().unwrap_or(std::path::Path::new(".")))?;
             std::fs::write(
                 &args.output,
@@ -154,6 +250,10 @@ fn main() -> anyhow::Result<()> {
                 "samples": args.samples, "bounces": args.bounces, "primitives": scene.primitives.len(), "bvh_depth": scene.bvh.depth, "device": lumen_rs::metal_backend::available(), "runs": records}),
                 )?,
             )?;
+            ensure!(
+                exact || args.allow_differences,
+                "{name} changed {changed_pixels} pixels; production quality gate failed"
+            );
         }
     }
     Ok(())

@@ -201,10 +201,20 @@ The release validation passed 53 library, viewer and physics tests, including th
 
 [Navigation measurements](results/m1-pro-point-navigation.json) include 600 native-window frames with walking, looking, GPU readback and interface drawing. The median work time was 5.46 ms; seven frames exceeded 16.67 ms. The software pacing median was 16.664 ms. This is not a guarantee of locked 60 FPS, and it does not describe final-render speed.
 
-The [Metal performance report](metal-performance.md) records the official Apple references, measured compiler regressions and an experimental compact-geometry layout. Those compiler/geometry variants are not enabled by default. Final resolution, physical materials, geometry, sampling and bounce settings remain unchanged.
+The [Metal performance report](metal-performance.md) records the official Apple references, measured compiler regressions and an experimental compact-geometry layout. Those earlier compiler/duplicated-geometry variants were not enabled by default. The later lossless layout pass is documented in the same report. Final resolution, physical materials, geometry, sampling and bounce settings remain unchanged.
 
 ### Native navigation input regression
 
 The initial navigation benchmark drove the camera directly and did not test window focus or keyboard input. Native testing subsequently reproduced an inverted macOS focus result in minifb 0.28: its `is_active()` returned false for a focused window. The viewer now checks AppKit's [key window](https://developer.apple.com/documentation/appkit/nswindow/iskeywindow) and [active application](https://developer.apple.com/documentation/appkit/nsapplication/isactive) directly on the UI thread.
 
 `cargo run --example check_viewer_input` opens a temporary macOS window and dispatches local AppKit key events. It verifies WASD and arrow movement without a mouse button, F and Tab handling, the native right-mouse handlers, and rejection of movement after losing focus. It does not send global input or require accessibility permissions. Unit tests also cover AZERTY aliases and Cmd/Ctrl+S without camera movement. F enters the navigation preview; S and D are exclusively movement keys, with image saving on Cmd/Ctrl+S and Raw/Clean on Tab.
+
+## Lossless Metal traversal and scheduling
+
+The release suite passed **49 standard tests and all 9 native Metal tests**, with GPU tests run serially. Formatting, Clippy with warnings denied, shader compilation and release executable builds passed. The new checks verify compact-node packing, all eight direction-octant traversal orders, exact production/reference/wide-BVH pixels across all six presets, tiny geometry through native custom intersections, and film recovery after cancellation with two submitted commands.
+
+The production configuration uses lossless split geometry/shading buffers, compact binary BVH nodes, cached ray/bounds calculations and at most two tile commands in flight. Queued work is drained before film reuse even on errors, and CPU readback accesses only the completed tile's pixels. Geometry, texture values, random samples, bounce settings and radiance calculations retain the reference representation.
+
+The [Full HD variant comparison](results/m1-pro-metal-fullhd-variants.json) measured the 4,705,126-primitive neon scene at 16 samples and 50 bounces over three repetitions. Reference/selected medians were 52.941/31.501 seconds, with exact raw-pixel equality and zero invalid samples. It measures transport, excluding setup and denoising, and is not a prediction of a completed 2,048-sample render. The four-way and native Metal prototypes remain explicit experiments; native traversal failed the apartment's exact-pixel gate.
+
+The subsequent [direct executable comparison](results/m1-pro-metal-lossless-fullhd.json) used the saved `ce68a04` binary and the rebuilt release with identical assets. Three alternating pairs measured **49.872 → 30.972 seconds** at the median: **1.61× throughput, 37.9% less tracing time**. All six renders completed every requested sample with zero invalid samples; every paired linear EXR comparison had zero maximum error, RMSE and relative L2 error. This is the release comparison; the variant comparison above was used to select the implementation.

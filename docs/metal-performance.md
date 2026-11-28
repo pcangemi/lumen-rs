@@ -4,9 +4,9 @@ The target is native Apple M1 Pro rendering with the complete scene, unchanged m
 
 ## What the current implementation does
 
-- A software binary SAH BVH runs inside a Metal compute kernel. Each path keeps a traversal stack and a nested dielectric stack.
+- A software binary SAH BVH runs inside a Metal compute kernel, with lossless 32-byte nodes and cached per-ray bounds calculations. Intersection geometry and shading attributes use separate streams. Each path keeps a traversal stack and a nested dielectric stack.
 - One thread traces a camera path, including its subsequent surface and volume interactions. Materials share a large shader with dynamic branches.
-- Each 128 × 128 tile is submitted separately. Sample batches adapt to measured GPU duration, targeting 20 ms per command. The CPU waits for completion before reading shared film buffers.
+- Each 128 × 128 tile is submitted separately, with at most two commands outstanding. Sample batches adapt to measured GPU duration, targeting 20 ms per command. The CPU reads only completed tile pixels and drains each batch before film reuse.
 - The viewer now owns a resident Metal renderer. Moving the camera reuses scene buffers and pipelines; only film state and camera parameters change. The same path-tracing kernel renders the final view.
 
 These observations identify candidates. They do not establish which hardware resource currently limits the shader; that requires profiling and controlled timings.
@@ -60,14 +60,76 @@ The 3,313,317-primitive neon apartment was measured at 640 × 360, 16 samples an
 | Stack variant with 128-thread compiler limit | 9.752 s |
 | Stack variant with 64-thread compiler limit | 7.823 s |
 
-The generic configuration remains the default. Specialization did not establish a useful gain here; the other compiler settings regressed. GPU execution occupied approximately 98% of measured tracing time, leaving little opportunity for a large speedup from submission overhead alone. GPU execution time includes memory stalls and does not establish high shader occupancy. [Raw compiler experiment results](results/m1-pro-metal-compiler-options.json).
+At the time of this earlier compiler experiment, the generic configuration remained the default. Specialization did not establish a useful gain here; the other compiler settings regressed. GPU execution occupied approximately 98% of measured tracing time, leaving little opportunity for a large speedup from submission overhead alone. GPU execution time includes memory stalls and does not establish high shader occupancy. [Raw compiler experiment results](results/m1-pro-metal-compiler-options.json).
 
 A separate paired experiment stored intersection geometry in a 64-byte stream, retaining all original floating-point values and primitive order. Its generic/compact medians were 6.131/5.931 s, approximately 3.3% less time. That costs about 212 MB of extra GPU buffers in this scene, so it remains explicit experimental tuning. Compare variants within their paired run; the two experiments have different compiled shaders and operating conditions. [Raw geometry experiment results](results/m1-pro-metal-geometry-layout.json).
 
-The larger opportunities still requiring prototypes and profiling are native Metal traversal, restructuring the large path kernel to reduce divergent work, and spatial light sampling. No claim of a large final-render speedup is made by these experiments.
+The later traversal pass below prototypes native Metal traversal and wider BVHs. Separate intersection/shading queues and spatial light sampling remain unimplemented; these earlier compiler experiments alone did not establish a large speedup.
 
 ## Point-cloud navigation measurement
 
 The final navigation benchmark walked and looked around the neon apartment for 600 frames, with a native 1280 × 820 window and a 960 × 540 point viewport. It used up to 1.2 million area-sampled points, a depth layer, no textures, adaptive density driven by Metal GPU execution timestamps, and absolute 60 Hz frame deadlines.
 
 Median preview work plus UI drawing was 5.46 ms; the 95th percentile was 12.57 ms. Median presentation/pacing interval was 16.664 ms. Seven of 600 work frames exceeded 16.67 ms, with a maximum of 24.26 ms. This establishes a 60 FPS target with observed misses, not a perfectly locked frame rate. These timings do not include the transition out of an in-flight final-render tile. [Recorded navigation measurements](results/m1-pro-point-navigation.json).
+
+## Lossless traversal experiments (2026-11-28)
+
+The new experiments keep the same primitive equations, surface attributes, texture data, random sequences, precision and light-transport code. `MetalTuning::default()` remains an explicit unoptimized reference for comparisons; production selection is made separately by `MetalRenderer::new`.
+
+- **Split geometry:** positions, edges and primitive metadata occupy a 64-byte stream. Normals and UVs occupy a separate 80-byte stream. Together they retain the original 144 bytes per primitive, removing the extra geometry copy needed by the earlier experiment.
+- **Compact binary nodes:** pack indices and tags into the unused fourth lanes of the bounds. Node storage falls from 48 to 32 bytes without quantizing the three-dimensional bounds.
+- **Cached ray bounds:** calculate direction reciprocals and parallel-axis flags once per traversal. Conservative slab expansion accounts for reciprocal rounding; the original primitive intersection still determines the hit.
+- **Four-way traversal:** collapse two binary levels into one node and test four child bounds together. All coordinates remain full precision. Child visitation follows the original binary split axes, preserving the ordering of coincident surfaces. At most three siblings are pending per two binary levels; 128 stack entries cover the builder's maximum depth of 60.
+- **Bounded submissions:** allow at most two independent tile commands in flight. Read only completed tile pixels, drain all submitted work on error/cancellation, and finish the pass before reusing pixels for the next sample range. Individual commands retain the existing adaptive duration target. This bounds outstanding work; it does not promise a hard latency ceiling.
+
+Native Metal acceleration structures were also implemented as an explicit experiment. Custom bounding-box intersections reuse the existing sphere/triangle and opacity equations. Shadow traversal remains software so the current thin-sheet transmission handling is retained. This prototype does **not** provide mesh instancing or a wavefront integrator. It changed raw pixels in the detailed apartment and therefore fails the exact-image gate; it must not be selected for production on the strength of its timing alone.
+
+The exploratory [layout sweep](results/m1-pro-metal-layout-sweep.json) and [traversal experiments](results/m1-pro-metal-traversal-experiments.json) record every variant and raw-pixel result. They are diagnostic screening runs, not delivery-resolution performance claims. Native traversal differed consistently across repetitions; the lossless software variants matched exactly.
+
+### Profiling limits and reproducibility
+
+A programmatic capture of the neon path-tracing dispatch was successfully replayed using Apple's `gpudebug`. Counter collection returned `GPU profiling requires Apple M3 / A17 Pro or later` on this M1 Pro. Consequently this report makes no measured register-occupancy or bandwidth claim. GPU command timestamps and controlled wall-clock comparisons remain available. Apple's guidance explains why reducing memory traffic and register lifetimes can matter, but it does not establish this shader's bottleneck. [GPU performance counters](https://developer.apple.com/documentation/xcode/analyzing-apple-gpu-performance-using-counter-statistics).
+
+For a small diagnostic capture, use an output path that does not already exist:
+
+```bash
+MTL_CAPTURE_ENABLED=1 cargo run --release --example benchmark_metal_tuning -- \
+  --scene interior-neon --width 128 --height 128 --samples 1 --repeats 1 \
+  --variants generic --capture .runtime/performance/neon.gputrace
+xcrun gpudebug --gputrace .runtime/performance/neon.gputrace
+```
+
+The benchmark fails on any changed raw pixel unless `--allow-differences` is explicitly supplied for experiments. Scene buffer bytes exclude CPU scene storage, temporary acceleration-build scratch, driver/compiler allocations and film buffers; they are not total process memory.
+
+Further work remains for mesh instancing, separate intersection/shading queues, spatial light selection and HDR importance sampling. These are not enabled or claimed as completed by this optimization pass. Sampling changes require statistical error-versus-time validation rather than an exact-pixel comparison.
+
+### Full HD variant selection
+
+The complete 4,705,126-primitive neon apartment was measured at **1920 × 1080, 16 spp, 50 bounces**, with three repetitions and reversed ordering. No other render or build ran during this comparison. Each of the nine images matched the reference's raw linear pixels exactly. [All runs and memory records](results/m1-pro-metal-fullhd-variants.json).
+
+| Configuration | Median tracing time | Scene buffer bytes |
+| --- | ---: | ---: |
+| Original reference | 52.941 s | 1,681,795,680 |
+| Compact binary BVH, split geometry, cached bounds, two commands | 31.501 s | 1,635,822,304 |
+| Four-way BVH, split geometry, two commands | 31.097 s | 1,647,354,704 |
+
+The compact binary configuration is selected for production: **1.68× throughput / 40.5% less tracing time** in this comparison, and about 46 MB less scene buffer storage. The four-way configuration's roughly 1.3% median advantage over compact binary is smaller than the observed run-to-run variation; it retains a larger traversal stack and remains an explicit experiment. This is not a completed 2,048-spp timing, nor a claim about every scene or another GPU.
+
+```bash
+cargo run --release --example benchmark_metal_tuning -- \
+  --scene interior-neon --width 1920 --height 1080 --samples 16 --bounces 50 \
+  --repeats 3 --variants generic,production,wide-queued
+```
+
+### Rebuilt executable versus the previous release
+
+The final application was compared directly against the saved `ce68a04` executable, using the same assets, seed, fixed sampling and bounce limit. Three pairs alternated execution order. No other rendering or compilation ran during measurement. This is the release speedup result; the internal variant timings above explain configuration selection.
+
+| Pair | Previous executable | Rebuilt executable | Maximum linear pixel error |
+| --- | ---: | ---: | ---: |
+| 1 | 49.872 s | 30.898 s | 0 |
+| 2 | 47.703 s | 31.025 s | 0 |
+| 3 | 49.942 s | 30.972 s | 0 |
+| Median | **49.872 s** | **30.972 s** | **0** |
+
+This establishes **1.61× tracing throughput / 37.9% less tracing time** on the M1 Pro for the Full HD, 16-spp, 50-bounce neon apartment. Every requested sample completed, with zero invalid samples. Scene loading, compilation, denoising and file output are outside the transport timer. No completed 2,048-spp duration or speed ratio against Cycles is inferred. [Complete paired reports, image errors and binary hashes](results/m1-pro-metal-lossless-fullhd.json).
