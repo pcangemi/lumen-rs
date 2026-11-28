@@ -189,3 +189,16 @@ Both rendering executables default to 1920 × 1080. The viewer filters on a sepa
 A controlled error-versus-time curve at delivery resolution remains necessary. The archived comparison establishes a baseline, not performance leadership. Repeat across sample counts and scene families, and evaluate denoised output separately.
 
 Native window event handling and long-session GPU memory behavior require interactive desktop testing. Headless screenshots do not establish those properties. Specialized caustic convergence, production asset compatibility and full color-management accuracy remain separate development work.
+
+
+## Interactive viewpoints and Metal tuning
+
+The viewer now retains the scene and Metal buffers across camera changes. Camera requests coalesce, old results carry generation tags, and cancelled interactive films can be discarded without a full-resolution readback. Point previews and final film buffers remain separate. Saved cameras round-trip through JSON and can be loaded by either executable.
+
+Native point projection is checked for correct depth ordering, clipping of points behind the camera, odd image widths, and repeatability after camera movement. Resident path tracing is compared against a fresh film after previews and camera changes. Compiler and geometry-layout experiments check exact raw linear pixel equality.
+
+The release validation passed 53 library, viewer and physics tests, including the optional OIDN checks and seven native Metal tests. GPU tests ran serially. Formatting, Clippy with warnings denied, compilation of both Metal shaders, and release executable builds passed. Saved-viewpoint smoke renders completed through both the Metal command-line renderer and the headless viewer.
+
+[Navigation measurements](results/m1-pro-point-navigation.json) include 600 native-window frames with walking, looking, GPU readback and interface drawing. The median work time was 5.46 ms; seven frames exceeded 16.67 ms. The software pacing median was 16.664 ms. This is not a guarantee of locked 60 FPS, and it does not describe final-render speed.
+
+The [Metal performance report](metal-performance.md) records the official Apple references, measured compiler regressions and an experimental compact-geometry layout. Those compiler/geometry variants are not enabled by default. Final resolution, physical materials, geometry, sampling and bounce settings remain unchanged.

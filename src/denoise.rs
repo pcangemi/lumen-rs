@@ -1,6 +1,6 @@
 //! Optional Open Image Denoise integration through its documented C API.
 //! Filtering only changes display/output pixels; Monte Carlo accumulators remain untouched.
-use crate::{rng::Rng, scene::Scene};
+use crate::{camera::Camera, progressive::RenderControl, rng::Rng, scene::Scene};
 use anyhow::{Context, Result, bail, ensure};
 use glam::Vec3;
 use libloading::Library;
@@ -71,17 +71,35 @@ pub struct Guides {
 impl Guides {
     /// Average primary surface features with the same camera model as the beauty image.
     pub fn new(scene: &Scene, width: u32, height: u32) -> Self {
+        Self::for_camera(
+            scene,
+            scene.camera,
+            width,
+            height,
+            &RenderControl::default(),
+        )
+        .unwrap()
+    }
+
+    /// Cancel feature extraction between pixels when navigation invalidates this camera.
+    pub fn for_camera(
+        scene: &Scene,
+        camera: Camera,
+        width: u32,
+        height: u32,
+        control: &RenderControl,
+    ) -> Option<Self> {
         let values: Vec<([f32; 3], [f32; 3])> = (0..width * height)
             .into_par_iter()
             .map(|index| {
+                if control.cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+                    return ([0.0; 3], [0.0; 3]);
+                }
                 let mut albedo = Vec3::ZERO;
                 let mut normal = Vec3::ZERO;
                 for sample in 0..8 {
                     let mut rng = Rng::new(index, sample, 0xa07);
-                    let ray =
-                        scene
-                            .camera
-                            .ray(index % width, index / width, width, height, &mut rng);
+                    let ray = camera.ray(index % width, index / width, width, height, &mut rng);
                     let hit = scene.intersect(ray, f32::INFINITY, false);
                     let limit = hit.as_ref().map_or(f32::INFINITY, |hit| hit.t);
                     if scene
@@ -108,10 +126,13 @@ impl Guides {
                 )
             })
             .collect();
-        Self {
+        if control.cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+            return None;
+        }
+        Some(Self {
             albedo: values.iter().map(|v| v.0).collect(),
             normal: values.into_iter().map(|v| v.1).collect(),
-        }
+        })
     }
 }
 impl Denoiser {

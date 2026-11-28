@@ -10,6 +10,7 @@ pub mod geometry;
 pub mod material;
 #[cfg(target_os = "macos")]
 pub mod metal_backend;
+pub mod navigation;
 pub mod render;
 pub mod rng;
 pub mod scene;
@@ -26,3 +27,9 @@ pub mod texture;
 pub mod medium;
 
 pub mod comparison;
+
+#[cfg(target_os = "macos")]
+pub mod metal_points;
+pub mod point_cloud;
+
+pub mod frame_pacing;

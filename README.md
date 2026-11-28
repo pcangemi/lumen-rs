@@ -22,24 +22,52 @@ Use `--backend cpu` for CPU rendering, or `--backend auto` to select an accessib
 
 The viewer schedules real rendering tiles in center-first passes: 64 × 64 on CPU and 128 × 128 on Metal. The sidebar reports device, elapsed time, estimated remaining time, samples, camera sample throughput, primitive count and BVH size.
 
+The viewer supports walking through the scene. Hold the right mouse button to look around; use the arrow keys, or hold the right mouse button with WASD / ZQSD to move. It shows a dense, texture-free point cloud during movement, then starts a fresh full-quality render after 450 ms without camera movement. Moving again interrupts refinement.
+
 | Control | Action |
 | --- | --- |
-| Scene buttons | Studio, interior, interior-night, interior-neon, outdoor or clouds |
-| Space / Pause | Pause or resume between tiles |
-| D / Raw–Clean | Toggle the current accumulation and the last denoised complete pass |
-| R / Restart | Restart the scene |
-| S / Save PNG | Export the displayed image to `renders/<scene>-live.png` |
+| Right mouse drag | Look around |
+| Arrow keys / right mouse + WASD or ZQSD | Walk; Shift moves faster |
+| F | Toggle walking and free flight |
+| Page Up / Page Down | Ascend / descend in free flight |
+| Home | Restore the scene's original camera |
+| F5 / F9 | Save / restore this scene's viewpoint in `renders/viewpoints/` |
+| Scene buttons | Load a preset |
+| Space / Pause | Pause or resume refinement |
+| D / Raw–Clean | Toggle accumulation and last denoised complete pass; release right mouse first |
+| R / Restart | Restart refinement at the current viewpoint |
+| S / Save PNG | Export the displayed image to `renders/<scene>-live.png`; release right mouse first |
 | + / − | Adjust exposure without retracing |
-| Escape | Stop an active render and retain its image |
+| Escape | Stop refinement and retain its image |
 | Close window | Cancel and exit |
 
-The clean view refreshes at complete passes, with at least three seconds between requests after the first preview. Tile outlines stay visible in both views. The footer identifies the current pass and the sample count of the displayed clean snapshot. A separate denoising worker and a bounded queue let rendering continue during filtering; a final filter is completed before reporting COMPLETE. Denoising never modifies the accumulators. Pause/cancel takes effect between tiles; an OIDN call already in progress finishes before its worker exits. Live timing includes preparation, pauses and filtering.
+Walking keeps the current eye height and uses conservative collision probes against the actual scene. It is a camera guard, not a full character controller: stairs, gravity and a swept capsule are not implemented. Free flight is unrestricted.
+
+The default navigation preview is an architectural point cloud with restrained colors, depth cues and a distinct tint for glass. It samples surface area so that large walls are represented, and avoids displaying blurry textures. Up to 1.2 million points cover a 12 m neighbourhood around the initial camera; the preview point budget adapts to rendering cost. Absolute frame deadlines avoid accumulating relative timer oversleep. The viewer targets 60 FPS, but this is a frame-budget target rather than a guarantee for arbitrary hardware, scene sizes or OS activity. Free flight beyond the sampled neighbourhood can reveal missing preview surfaces; use `--preview-style materials` for an unrestricted geometry preview.
+
+`--preview-style materials --preview-width 480` retains the optional textured headlight preview. Both preview styles intentionally omit physical illumination, smoke and depth of field while moving. Final refinement uses the physical path tracer at the requested resolution, samples and bounce count, including all glass and volume effects. Preview pixels never enter its accumulators, and Save PNG rejects an active movement preview.
+
+![Texture-free point-cloud navigation preview](renders/navigation-preview.png)
+
+The scene, BVH, Metal pipelines and scene buffers remain resident across camera changes. A single pending camera slot replaces obsolete requests, and generation tags prevent old tiles or denoising results from overwriting a newer view. Preview and final film buffers are separate. Point previews return packed display pixels, avoiding full-resolution tone mapping on each movement frame. Denoising guides are camera-specific, created only when a pass needs them, and feature extraction can be cancelled on movement. An OIDN call already executing can finish on its own worker without blocking navigation.
+
+The clean view refreshes at complete passes, with at least three seconds between requests after the first preview. Tile outlines stay visible in both views. Final filtering completes before COMPLETE. Denoising never modifies the accumulators. Timing includes preparation, pauses and filtering.
 
 ```bash
-./target/release/viewer --scene interior --samples 1024 --width 1200 --height 800
-./target/release/viewer --scene outdoor --backend cpu --threads 10
-./target/release/viewer --scene-file scenes/water-study.json --raw
+./target/release/viewer --backend metal --scene interior-neon --samples 2048 --bounces 50
+./target/release/viewer --scene interior --preview-width 960 --settle-ms 450
+./target/release/viewer --scene interior-neon --viewpoint renders/viewpoints/interior-neon.json
 ```
+
+The default final resolution remains 1920 × 1080. `--preview-width` changes only the movement preview; `--settle-ms` changes the quiet period. F5 saves the camera basis, lens and exposure. `--viewpoint` restores them in either the viewer or command-line renderer (including the saved exposure), adapting aspect ratio to the requested output dimensions:
+
+```bash
+./target/release/lumen-rs --backend metal --scene interior-neon \
+  --viewpoint renders/viewpoints/interior-neon.json --samples 2048 --bounces 50 \
+  --denoise --exr --output renders/chosen-view.png
+```
+
+Compiler experiments, quality gates and the official Apple references are documented in [Metal performance work](docs/metal-performance.md).
 
 ## Render to files
 

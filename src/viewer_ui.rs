@@ -38,7 +38,17 @@ pub struct Button {
 }
 
 /// UI state contains a copy of the linear film; exposure changes never restart tracing.
+pub struct PreviewFrame {
+    pub width: u32,
+    pub height: u32,
+    pub pixels: Vec<Vec3>,
+    pub packed: Option<Vec<u32>>,
+}
+
 pub struct ViewerState {
+    pub preview: Option<PreviewFrame>,
+    pub navigating: bool,
+    pub flying: bool,
     pub image_width: u32,
     pub image_height: u32,
     pub pixels: Vec<Vec3>,
@@ -81,6 +91,9 @@ impl ViewerState {
         exposure: f32,
     ) -> Self {
         Self {
+            preview: None,
+            navigating: false,
+            flying: false,
             image_width: width,
             image_height: height,
             pixels: vec![Vec3::ZERO; width as usize * height as usize],
@@ -219,7 +232,29 @@ pub fn draw_cached(
         PANEL,
     );
     canvas.text(24, 22, "LUMEN", TEXT, 3);
-    canvas.text(168, 29, "PROGRESSIVE RENDER", MUTED, 1);
+    canvas.text(
+        168,
+        22,
+        if state.navigating || state.preview.is_some() {
+            "NAVIGATION / PREVIEW ONLY"
+        } else {
+            "PROGRESSIVE PATH TRACING"
+        },
+        MUTED,
+        1,
+    );
+    canvas.text(
+        168,
+        40,
+        if state.flying {
+            "FLIGHT [F] / PGUP-PGDN altitude"
+        } else {
+            "WALK [F] / ARROWS move"
+        },
+        ACCENT,
+        1,
+    );
+    canvas.text(168, 56, "RMB drag look / RMB + WASD or ZQSD move", MUTED, 1);
     canvas.text(sidebar_x + 20, 24, &state.backend.to_uppercase(), ACCENT, 2);
     canvas.text(
         sidebar_x + 20,
@@ -264,13 +299,35 @@ pub fn draw_cached(
     };
     if cache.key.as_ref() != Some(&key) {
         cache.pixels.resize(display_width * display_height, 0);
-        for y in 0..display_height {
-            for x in 0..display_width {
-                let source_x = ((x as f32 / scale) as u32).min(state.image_width - 1);
-                let source_y = ((y as f32 / scale) as u32).min(state.image_height - 1);
-                let index = (source_y * state.image_width + source_x) as usize;
-                cache.pixels[y * display_width + x] =
-                    color(state.display_pixels()[index], state.exposure);
+        if let Some(preview) = &state.preview {
+            // Tone-map each low-resolution preview pixel once, then scale packed colors.
+            let mapped;
+            let colors = if let Some(pixels) = &preview.packed {
+                pixels.as_slice()
+            } else {
+                mapped = preview
+                    .pixels
+                    .iter()
+                    .map(|p| color(*p, state.exposure))
+                    .collect::<Vec<_>>();
+                &mapped
+            };
+            for y in 0..display_height {
+                let sy = y * preview.height as usize / display_height;
+                for x in 0..display_width {
+                    let sx = x * preview.width as usize / display_width;
+                    cache.pixels[y * display_width + x] = colors[sy * preview.width as usize + sx];
+                }
+            }
+        } else {
+            for y in 0..display_height {
+                for x in 0..display_width {
+                    let source_x = ((x as f32 / scale) as u32).min(state.image_width - 1);
+                    let source_y = ((y as f32 / scale) as u32).min(state.image_height - 1);
+                    let index = (source_y * state.image_width + source_x) as usize;
+                    cache.pixels[y * display_width + x] =
+                        color(state.display_pixels()[index], state.exposure);
+                }
             }
         }
         cache.key = Some(key);
@@ -330,7 +387,7 @@ pub fn draw_cached(
     canvas.text(
         24,
         height.saturating_sub(25),
-        "SPACE pause  R restart  S save  D raw/clean  +/- exposure  ESC stop",
+        "HOME reset view  F5 save view  F9 restore  SPACE pause  S PNG  D clean  +/- EV",
         MUTED,
         1,
     );

@@ -1,0 +1,331 @@
+{
+  "bounces": 50,
+  "bvh_depth": 31,
+  "device": "Apple M1 Pro",
+  "height": 360,
+  "primitives": 3313317,
+  "runs": [
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 6.807574833044782,
+        "max_command_seconds": 0.04566362500190735,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 6.935828875,
+      "repeat": 0,
+      "setup_seconds": 0.700108958,
+      "tuning": {
+        "compact_stack": false,
+        "specialize_scene": false,
+        "threadgroup_limit": 0
+      },
+      "variant": "generic"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 6.770797624718398,
+        "max_command_seconds": 0.04713204165454954,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 6.8679348749999996,
+      "repeat": 0,
+      "setup_seconds": 0.430428834,
+      "tuning": {
+        "compact_stack": false,
+        "specialize_scene": true,
+        "threadgroup_limit": 0
+      },
+      "variant": "specialized"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 7.318967542028986,
+        "max_command_seconds": 0.054413750069215894,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 7.438808541,
+      "repeat": 0,
+      "setup_seconds": 1.745316458,
+      "tuning": {
+        "compact_stack": true,
+        "specialize_scene": true,
+        "threadgroup_limit": 0
+      },
+      "variant": "compact-stack"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 9.558806960121728,
+        "max_command_seconds": 0.06291320838499814,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 9.672795875,
+      "repeat": 0,
+      "setup_seconds": 1.684925,
+      "tuning": {
+        "compact_stack": true,
+        "specialize_scene": true,
+        "threadgroup_limit": 128
+      },
+      "variant": "compact-128"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 7.72217691608239,
+        "max_command_seconds": 0.04911012505181134,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 64,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 7.81928325,
+      "repeat": 0,
+      "setup_seconds": 1.705016333,
+      "tuning": {
+        "compact_stack": true,
+        "specialize_scene": true,
+        "threadgroup_limit": 64
+      },
+      "variant": "compact-64"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 7.709464792395011,
+        "max_command_seconds": 0.04993345832917839,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 64,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 7.82271675,
+      "repeat": 1,
+      "setup_seconds": 0.303475584,
+      "tuning": {
+        "compact_stack": true,
+        "specialize_scene": true,
+        "threadgroup_limit": 64
+      },
+      "variant": "compact-64"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 9.63955595844891,
+        "max_command_seconds": 0.0663613750366494,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 9.751745791,
+      "repeat": 1,
+      "setup_seconds": 0.403919416,
+      "tuning": {
+        "compact_stack": true,
+        "specialize_scene": true,
+        "threadgroup_limit": 128
+      },
+      "variant": "compact-128"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 7.360489375190809,
+        "max_command_seconds": 0.047234083409421146,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 7.473422708,
+      "repeat": 1,
+      "setup_seconds": 0.423592,
+      "tuning": {
+        "compact_stack": true,
+        "specialize_scene": true,
+        "threadgroup_limit": 0
+      },
+      "variant": "compact-stack"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 6.816025749780238,
+        "max_command_seconds": 0.04443354159593582,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 6.920776625,
+      "repeat": 1,
+      "setup_seconds": 0.448341542,
+      "tuning": {
+        "compact_stack": false,
+        "specialize_scene": true,
+        "threadgroup_limit": 0
+      },
+      "variant": "specialized"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 6.791711665922776,
+        "max_command_seconds": 0.044627874973230064,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 6.905406292,
+      "repeat": 1,
+      "setup_seconds": 0.357405167,
+      "tuning": {
+        "compact_stack": false,
+        "specialize_scene": false,
+        "threadgroup_limit": 0
+      },
+      "variant": "generic"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 6.7897139163687825,
+        "max_command_seconds": 0.048655624967068434,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 6.920973333,
+      "repeat": 2,
+      "setup_seconds": 0.353687375,
+      "tuning": {
+        "compact_stack": false,
+        "specialize_scene": false,
+        "threadgroup_limit": 0
+      },
+      "variant": "generic"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 6.752035667421296,
+        "max_command_seconds": 0.04285966663155705,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 6.883888583,
+      "repeat": 2,
+      "setup_seconds": 0.404983459,
+      "tuning": {
+        "compact_stack": false,
+        "specialize_scene": true,
+        "threadgroup_limit": 0
+      },
+      "variant": "specialized"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 7.329471833538264,
+        "max_command_seconds": 0.04702149995137006,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 7.451158166,
+      "repeat": 2,
+      "setup_seconds": 0.371947416,
+      "tuning": {
+        "compact_stack": true,
+        "specialize_scene": true,
+        "threadgroup_limit": 0
+      },
+      "variant": "compact-stack"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 9.679674874292687,
+        "max_command_seconds": 0.06694933329708874,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 9.79040125,
+      "repeat": 2,
+      "setup_seconds": 0.383952416,
+      "tuning": {
+        "compact_stack": true,
+        "specialize_scene": true,
+        "threadgroup_limit": 128
+      },
+      "variant": "compact-128"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 7.795816415688023,
+        "max_command_seconds": 0.05573562497738749,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 64,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 7.927260292,
+      "repeat": 2,
+      "setup_seconds": 0.396983291,
+      "tuning": {
+        "compact_stack": true,
+        "specialize_scene": true,
+        "threadgroup_limit": 64
+      },
+      "variant": "compact-64"
+    }
+  ],
+  "samples": 16,
+  "scene": "interior-neon",
+  "width": 640,
+  "date": "2026-11-28",
+  "benchmark_binary_sha256": "9c44d2c03c92caeac19dfe48962e922406121d4b51243f19669b6b4e38a571b6",
+  "conditions": "Other viewer closed/paused; no concurrent render or compilation during measured runs. 640x360 diagnostic timings, not Full HD speed claims.",
+  "decision": "Keep generic compiler configuration; specialization gain is negligible and other tested configurations regress."
+}

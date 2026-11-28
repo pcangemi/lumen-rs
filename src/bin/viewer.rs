@@ -2,21 +2,17 @@
 use anyhow::{Context, Result, ensure};
 use clap::{Parser, ValueEnum};
 use lumen_rs::{
+    navigation::{Navigator, Viewpoint},
     output,
-    progressive::{self, RenderControl, TileUpdate},
-    render::{RenderOutput, RenderSettings},
+    progressive::{self, RenderControl},
+    render::RenderSettings,
     scene,
     viewer_ui::{self, Action, ViewerState},
 };
 use minifb::{Key, KeyRepeat, MouseButton, MouseMode, Window, WindowOptions};
 use std::{
     path::PathBuf,
-    sync::{
-        Arc,
-        atomic::Ordering,
-        mpsc::{self, Receiver},
-    },
-    thread,
+    sync::{Arc, atomic::Ordering},
     time::{Duration, Instant},
 };
 
@@ -26,6 +22,12 @@ enum Backend {
     Cpu,
     Metal,
 }
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum PreviewStyle {
+    Points,
+    Materials,
+}
+
 #[derive(Parser, Clone)]
 #[command(about = "Lumen Studio — progressive native Rust renderer")]
 struct Args {
@@ -33,6 +35,9 @@ struct Args {
     scene: String,
     #[arg(long)]
     scene_file: Option<PathBuf>,
+    /// Restore a saved camera and exposure on startup.
+    #[arg(long)]
+    viewpoint: Option<PathBuf>,
     #[arg(long, value_enum, default_value = "auto")]
     backend: Backend,
     #[arg(long, default_value_t = 1920)]
@@ -55,6 +60,14 @@ struct Args {
     /// Export the actual UI drawing without creating a window (CPU validation).
     #[arg(long)]
     headless_preview: Option<PathBuf>,
+    /// Width of the approximate navigation preview; final resolution is unchanged.
+    #[arg(long, default_value_t = 960, value_parser = clap::value_parser!(u32).range(160..=1280))]
+    preview_width: u32,
+    #[arg(long, value_enum, default_value = "points")]
+    preview_style: PreviewStyle,
+    /// Quiet time before starting a fresh full-quality render.
+    #[arg(long, default_value_t = 450, value_parser = clap::value_parser!(u64).range(100..=5000))]
+    settle_ms: u64,
     /// Disable automatic progressive denoising.
     #[arg(long)]
     raw: bool,
@@ -72,183 +85,29 @@ impl Args {
         }
     }
 }
-enum Event {
-    Started {
-        backend: String,
-        device: String,
-        primitives: usize,
-        nodes: usize,
-    },
-    Tile(TileUpdate),
-    Denoising(u32),
-    Denoised {
-        pixels: Vec<glam::Vec3>,
-        samples: u32,
-    },
-    Finalizing,
-    Warning(String),
-    Finished(Box<RenderOutput>),
-    Failed(String),
-}
-struct Job {
-    receiver: Receiver<Event>,
-    control: Arc<RenderControl>,
-    started: Instant,
-}
-impl Drop for Job {
-    fn drop(&mut self) {
-        self.control.cancelled.store(true, Ordering::Relaxed);
-    }
-}
-fn start(args: &Args) -> Job {
-    let (sender, receiver) = mpsc::sync_channel(64);
-    let control = Arc::new(RenderControl::default());
-    let worker_control = Arc::clone(&control);
-    let args = args.clone();
-    thread::spawn(move || {
-        let run = || -> Result<RenderOutput> {
-            let aspect = args.width as f32 / args.height as f32;
-            let scene = if let Some(path) = &args.scene_file {
-                scene::load(path, aspect)?
-            } else {
-                scene::preset(&args.scene, aspect)?
-            };
-            #[cfg(target_os = "macos")]
-            let device = lumen_rs::metal_backend::available();
-            #[cfg(not(target_os = "macos"))]
-            let device: Option<String> = None;
-            let metal = matches!(args.backend, Backend::Metal)
-                || matches!(args.backend, Backend::Auto) && device.is_some();
-            let _ = sender.send(Event::Started {
-                backend: if metal { "Metal GPU" } else { "CPU / Rayon" }.into(),
-                device: if metal {
-                    #[cfg(target_os = "macos")]
-                    {
-                        device.unwrap_or_else(|| "Metal unavailable".into())
-                    }
-                    #[cfg(not(target_os = "macos"))]
-                    {
-                        "Metal unavailable".into()
-                    }
-                } else {
-                    format!("{} CPU threads", rayon::current_num_threads())
-                },
-                primitives: scene.primitives.len(),
-                nodes: scene.bvh.nodes.len(),
-            });
-            let scene = Arc::new(scene);
-            // OIDN owns its handle on a separate thread; filtering never stalls GPU dispatch.
-            let filter = if args.raw {
-                None
-            } else {
-                let (requests, incoming) = mpsc::sync_channel::<(Vec<glam::Vec3>, u32)>(1);
-                let scene = Arc::clone(&scene);
-                let events = sender.clone();
-                let control = Arc::clone(&worker_control);
-                let width = args.width;
-                let height = args.height;
-                let handle = thread::spawn(move || {
-                    let denoiser = match lumen_rs::denoise::Denoiser::new() {
-                        Ok(denoiser) => denoiser,
-                        Err(error) => {
-                            eprintln!("Denoising unavailable: {error:#}");
-                            let _ = events.send(Event::Warning("RAW: install denoiser".into()));
-                            return;
-                        }
-                    };
-                    let guides = lumen_rs::denoise::Guides::new(&scene, width, height);
-                    while let Ok((pixels, samples)) = incoming.recv() {
-                        if control.cancelled.load(Ordering::Relaxed) {
-                            break;
-                        }
-                        let _ = events.send(Event::Denoising(samples));
-                        match denoiser.filter(&pixels, &guides, width, height) {
-                            Ok(pixels) => {
-                                let _ = events.send(Event::Denoised { pixels, samples });
-                            }
-                            Err(error) => {
-                                eprintln!("{error:#}");
-                                let _ = events.send(Event::Warning("Denoising failed".into()));
-                            }
-                        }
-                    }
-                });
-                Some((requests, handle))
-            };
-            let mut last_filter = Instant::now();
-            let mut first_filter = true;
-            let mut live_pixels =
-                vec![glam::Vec3::ZERO; args.width as usize * args.height as usize];
-            let update = |tile: TileUpdate| {
-                for (local, pixel) in tile.pixels.iter().enumerate() {
-                    live_pixels[tile.tile.image_index(local, args.width)] = *pixel;
-                }
-                let pass_samples = tile.pass_samples;
-                let filter_this_pass = tile.pass_complete
-                    && pass_samples >= 8
-                    && pass_samples < args.samples
-                    && (first_filter || last_filter.elapsed() >= Duration::from_secs(3));
-                if sender.send(Event::Tile(tile)).is_err() {
-                    worker_control.cancelled.store(true, Ordering::Relaxed);
-                    return;
-                }
-                if filter_this_pass
-                    && !worker_control.cancelled.load(Ordering::Relaxed)
-                    && let Some((requests, _)) = &filter
-                    && requests
-                        .try_send((live_pixels.clone(), pass_samples))
-                        .is_ok()
-                {
-                    last_filter = Instant::now();
-                    first_filter = false;
-                }
-            };
-            let result = if metal {
-                #[cfg(target_os = "macos")]
-                {
-                    lumen_rs::metal_backend::render_progressive(
-                        &scene,
-                        args.settings(),
-                        &worker_control,
-                        update,
-                    )
-                }
-                #[cfg(not(target_os = "macos"))]
-                {
-                    anyhow::bail!("Metal requires macOS")
-                }
-            } else {
-                progressive::cpu(&scene, args.settings(), &worker_control, update)
-            };
-            if let Some((requests, handle)) = filter {
-                if let Ok(result) = &result
-                    && !worker_control.cancelled.load(Ordering::Relaxed)
-                {
-                    let _ = sender.send(Event::Finalizing);
-                    let _ = requests.send((result.pixels.clone(), args.samples));
-                }
-                drop(requests);
-                let _ = handle.join();
-            }
-            result
-        };
-        match run() {
-            Ok(result) => {
-                let _ = sender.send(Event::Finished(Box::new(result)));
-            }
-            Err(error) => {
-                let _ = sender.send(Event::Failed(format!("{error:#}")));
-            }
-        }
-    });
-    Job {
-        receiver,
-        control,
-        started: Instant::now(),
-    }
-}
+#[path = "viewer/worker.rs"]
+mod worker;
+use worker::{Event, start};
+
 fn update(state: &mut ViewerState, event: Event, cancelled: bool) {
     match event {
+        Event::Ready(_) => {}
+        Event::Preview {
+            pixels,
+            packed,
+            width,
+            height,
+            seconds,
+        } => {
+            state.preview = Some(viewer_ui::PreviewFrame {
+                pixels,
+                packed,
+                width,
+                height,
+            });
+            state.filtered_pixels = None;
+            state.notice = format!("Preview {width}x{height}: {:.0} ms", seconds * 1000.0);
+        }
         Event::Started {
             backend,
             device,
@@ -315,6 +174,7 @@ fn update_cached(
 ) {
     let filtered = state.show_filtered && state.filtered_pixels.is_some();
     let image_changed = match &event {
+        Event::Preview { .. } => true,
         Event::Tile(_) | Event::Finished(_) => !filtered,
         Event::Denoised { .. } => state.show_filtered,
         _ => false,
@@ -325,6 +185,10 @@ fn update_cached(
     update(state, event, cancelled);
 }
 fn save_png(state: &ViewerState) -> Result<PathBuf> {
+    ensure!(
+        state.preview.is_none(),
+        "Stop moving and let refinement start before saving a rendered image"
+    );
     let path = PathBuf::from("renders").join(format!("{}-live.png", state.scene));
     std::fs::create_dir_all("renders")?;
     let bytes: Vec<u8> = state
@@ -349,9 +213,44 @@ fn save_png(state: &ViewerState) -> Result<PathBuf> {
     )?;
     Ok(path)
 }
+fn reset_accumulation(state: &mut ViewerState, preview: bool) {
+    state.navigating = preview;
+    state.filtered_pixels = None;
+    state.filtered_samples = 0;
+    state.completed_samples = 0;
+    state.pass_samples = 0;
+    state.progress = 0.0;
+    state.seconds = 0.0;
+    state.last_tile = None;
+    state.finished = false;
+    state.paused = false;
+    state.status = if preview {
+        "NAVIGATION PREVIEW"
+    } else {
+        "RENDERING"
+    }
+    .into();
+    if !preview {
+        state.preview = None;
+        state.pixels.fill(glam::Vec3::ZERO);
+        state.notice.clear();
+    }
+}
+
 fn main() -> Result<()> {
     let mut args = Args::parse();
     args.settings().validate()?;
+    let initial_view = if let Some(path) = &args.viewpoint {
+        let key = args.scene_file.as_ref().map_or_else(
+            || args.scene.clone(),
+            |path| path.to_string_lossy().into_owned(),
+        );
+        let view = Viewpoint::load(path, &key, args.width as f32 / args.height as f32)?;
+        args.exposure = view.exposure;
+        Some(view.camera)
+    } else {
+        None
+    };
     ensure!(
         args.exposure.is_finite() && args.exposure.abs() <= 30.0,
         "Exposure must be between -30 and +30 EV"
@@ -364,11 +263,14 @@ fn main() -> Result<()> {
     }
     if let Some(path) = &args.headless_preview {
         let aspect = args.width as f32 / args.height as f32;
-        let scene = if let Some(path) = &args.scene_file {
+        let mut scene = if let Some(path) = &args.scene_file {
             scene::load(path, aspect)?
         } else {
             scene::preset(&args.scene, aspect)?
         };
+        if let Some(camera) = initial_view {
+            scene.camera = camera;
+        }
         let mut state = ViewerState::new(
             args.width,
             args.height,
@@ -416,7 +318,8 @@ fn main() -> Result<()> {
         },
     )
     .context("Cannot create window; launch viewer from a graphical desktop session")?;
-    window.set_target_fps(30);
+    window.set_target_fps(0);
+    let mut frame_pacer = lumen_rs::frame_pacing::FramePacer::new(60);
     let mut state = ViewerState::new(
         args.width,
         args.height,
@@ -426,17 +329,157 @@ fn main() -> Result<()> {
         args.exposure,
     );
     let mut job = start(&args);
+    if let Some(camera) = initial_view {
+        job.request(camera, false);
+    }
+    let mut restore_initial_view = initial_view;
     let mut frame_cache = viewer_ui::FrameCache::default();
     let mut mouse_was_down = false;
+    let mut navigator: Option<Navigator> = None;
+    let mut navigation_scene = None;
+    let mut last_mouse = None;
+    let mut last_tick = Instant::now();
+    let mut last_motion: Option<Instant> = None;
+    let mut latest_preview = 0;
     while window.is_open() {
-        for event in job.receiver.try_iter().take(32) {
-            update_cached(
-                &mut state,
-                event,
-                job.control.cancelled.load(Ordering::Relaxed),
-                &mut frame_cache,
-            );
+        for message in job.receiver.try_iter().take(32) {
+            if let Event::Ready(scene) = &message.event {
+                let mut nav = Navigator::new(scene.camera);
+                if let Some(camera) = restore_initial_view.take() {
+                    nav.camera = camera;
+                }
+                navigator = Some(nav);
+                navigation_scene = Some(Arc::clone(scene));
+            }
+            let accepted_preview = state.navigating
+                && message.generation >= latest_preview
+                && matches!(message.event, Event::Preview { .. });
+            if message.generation == 0
+                || (!job.control.cancelled.load(Ordering::Relaxed)
+                    && (message.generation == job.generation || accepted_preview))
+            {
+                if matches!(message.event, Event::Preview { .. }) {
+                    if !state.navigating {
+                        continue;
+                    }
+                    latest_preview = message.generation;
+                }
+                update_cached(
+                    &mut state,
+                    message.event,
+                    job.control.cancelled.load(Ordering::Relaxed),
+                    &mut frame_cache,
+                );
+            }
         }
+        let now = Instant::now();
+        let dt = now.duration_since(last_tick).as_secs_f32().min(0.05);
+        last_tick = now;
+        let looking = window.is_active() && window.get_mouse_down(MouseButton::Right);
+        let mouse = window.get_mouse_pos(MouseMode::Discard);
+        let mut moved = false;
+        if let (Some(nav), Some(scene)) = (&mut navigator, &navigation_scene) {
+            if window.is_active() {
+                if looking && let (Some((x, y)), Some((px, py))) = (mouse, last_mouse) {
+                    let delta = glam::Vec2::new(x - px, py - y) * 0.003;
+                    if delta.length_squared() > 1e-8 {
+                        nav.look(delta);
+                        moved = true;
+                    }
+                }
+                let down = |key| window.is_key_down(key);
+                let horizontal = (down(Key::Right) || looking && down(Key::D)) as i32
+                    - (down(Key::Left) || looking && (down(Key::A) || down(Key::Q))) as i32;
+                let forward = (down(Key::Up) || looking && (down(Key::W) || down(Key::Z))) as i32
+                    - (down(Key::Down) || looking && down(Key::S)) as i32;
+                let vertical = down(Key::PageUp) as i32 - down(Key::PageDown) as i32;
+                let speed = if down(Key::LeftShift) || down(Key::RightShift) {
+                    3.0
+                } else {
+                    1.2
+                };
+                moved |= nav.translate(
+                    glam::Vec3::new(horizontal as f32, vertical as f32, forward as f32),
+                    dt * speed,
+                    scene,
+                );
+                if window.is_key_pressed(Key::F, KeyRepeat::No) {
+                    nav.toggle_flight();
+                }
+                if window.is_key_pressed(Key::Home, KeyRepeat::No) {
+                    nav.reset();
+                    moved = true;
+                }
+                let name: String = args
+                    .scene
+                    .chars()
+                    .map(|c| {
+                        if c.is_ascii_alphanumeric() || c == '-' {
+                            c
+                        } else {
+                            '_'
+                        }
+                    })
+                    .collect();
+                let view_path = PathBuf::from("renders/viewpoints").join(format!("{name}.json"));
+                let scene_key = args.scene_file.as_ref().map_or_else(
+                    || args.scene.clone(),
+                    |path| path.to_string_lossy().into_owned(),
+                );
+                if window.is_key_pressed(Key::F5, KeyRepeat::No) {
+                    match (Viewpoint {
+                        scene: scene_key.clone(),
+                        camera: nav.camera,
+                        exposure: state.exposure,
+                    })
+                    .save(&view_path)
+                    {
+                        Ok(()) => {
+                            state.notice = "Viewpoint saved [F9 restore]".into();
+                            println!("Saved viewpoint {}", view_path.display());
+                        }
+                        Err(error) => {
+                            state.notice = "Viewpoint save failed".into();
+                            eprintln!("{error:#}");
+                        }
+                    }
+                }
+                if window.is_key_pressed(Key::F9, KeyRepeat::No) {
+                    match Viewpoint::load(
+                        &view_path,
+                        &scene_key,
+                        args.width as f32 / args.height as f32,
+                    ) {
+                        Ok(view) => {
+                            nav.camera = view.camera;
+                            state.exposure = view.exposure;
+                            moved = true;
+                        }
+                        Err(error) => {
+                            state.notice = "No valid saved viewpoint".into();
+                            eprintln!("{error:#}");
+                        }
+                    }
+                }
+            }
+            state.flying = nav.flying;
+            if moved {
+                job.request(nav.camera, true);
+                reset_accumulation(&mut state, true);
+                last_motion = Some(now);
+                frame_cache.invalidate();
+            } else if !state.paused
+                && last_motion.is_some_and(|time| {
+                    now.duration_since(time) >= Duration::from_millis(args.settle_ms)
+                })
+            {
+                job.request(nav.camera, false);
+                reset_accumulation(&mut state, false);
+                last_motion = None;
+                frame_cache.invalidate();
+            }
+        }
+        last_mouse = if looking { mouse } else { None };
         if !state.finished {
             state.seconds = job.started.elapsed().as_secs_f64();
         }
@@ -461,13 +504,13 @@ fn main() -> Result<()> {
         if window.is_key_pressed(Key::Space, KeyRepeat::No) {
             action = Some(Action::TogglePause);
         }
-        if window.is_key_pressed(Key::D, KeyRepeat::No) {
+        if !looking && window.is_key_pressed(Key::D, KeyRepeat::No) {
             action = Some(Action::ToggleDenoise);
         }
         if window.is_key_pressed(Key::R, KeyRepeat::No) {
             action = Some(Action::Restart);
         }
-        if window.is_key_pressed(Key::S, KeyRepeat::No) {
+        if !looking && window.is_key_pressed(Key::S, KeyRepeat::No) {
             action = Some(Action::Save);
         }
         if window.is_key_pressed(Key::Equal, KeyRepeat::Yes) {
@@ -478,7 +521,10 @@ fn main() -> Result<()> {
         }
         if window.is_key_pressed(Key::Escape, KeyRepeat::No) && !state.finished {
             job.control.cancelled.store(true, Ordering::Relaxed);
-            state.status = "STOPPING".into();
+            state.status = "STOPPED".into();
+            state.finished = true;
+            state.navigating = false;
+            last_motion = None;
         }
         match action {
             Some(Action::ToggleDenoise) => {
@@ -489,14 +535,27 @@ fn main() -> Result<()> {
                 job.control.paused.store(state.paused, Ordering::Relaxed);
                 state.status = if state.paused { "PAUSED" } else { "RENDERING" }.into();
             }
-            Some(Action::Restart | Action::Scene(_)) => {
+            Some(Action::Restart) => {
+                if let Some(nav) = &navigator {
+                    job.request(nav.camera, false);
+                    reset_accumulation(&mut state, false);
+                    last_motion = None;
+                    frame_cache.invalidate();
+                }
+            }
+            Some(Action::Scene(_)) => {
                 if let Some(Action::Scene(index)) = action {
                     args.scene = scene::PRESET_NAMES[index].into();
                     args.scene_file = None;
+                    args.viewpoint = None;
                 }
                 args.exposure = state.exposure;
                 job.control.cancelled.store(true, Ordering::Relaxed);
                 job = start(&args);
+                navigator = None;
+                navigation_scene = None;
+                last_motion = None;
+                latest_preview = 0;
                 state = ViewerState::new(
                     args.width,
                     args.height,
@@ -520,6 +579,7 @@ fn main() -> Result<()> {
             _ => {}
         }
         window.update_with_buffer(&pixels, width, height)?;
+        frame_pacer.wait();
     }
     Ok(())
 }
@@ -527,6 +587,7 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lumen_rs::progressive::TileUpdate;
 
     #[test]
     fn render_events_refresh_the_visible_frame() {
@@ -566,6 +627,61 @@ mod tests {
     }
 
     #[test]
+    fn camera_changes_discard_previous_accumulation() {
+        let args = Args::parse_from([
+            "viewer",
+            "--backend",
+            "cpu",
+            "--scene",
+            "studio",
+            "--width",
+            "24",
+            "--height",
+            "16",
+            "--samples",
+            "8",
+            "--raw",
+        ]);
+        let mut job = start(&args);
+        let scene = loop {
+            let message = job.receiver.recv_timeout(Duration::from_secs(10)).unwrap();
+            if let Event::Ready(scene) = message.event {
+                break scene;
+            }
+        };
+        let mut camera = scene.camera;
+        for _ in 0..20 {
+            camera.origin[0] += 0.01;
+            job.request(camera, true);
+        }
+        job.request(camera, false);
+        let result = loop {
+            let message = job
+                .receiver
+                .recv_timeout(Duration::from_secs(10))
+                .expect("Navigation worker stalled");
+            if message.generation != job.generation {
+                continue;
+            }
+            match message.event {
+                Event::Finished(result) => break result,
+                Event::Failed(error) => panic!("{error}"),
+                _ => {}
+            }
+        };
+        let expected = progressive::cpu_with_camera(
+            &scene,
+            camera,
+            args.settings(),
+            &RenderControl::default(),
+            |_| {},
+        )
+        .unwrap();
+        assert_eq!(result.pixels, expected.pixels);
+        assert_eq!(result.samples, expected.samples);
+    }
+
+    #[test]
     #[ignore = "requires the optional Open Image Denoise runtime"]
     fn worker_delivers_final_clean_image_before_completion() {
         let args = Args::parse_from([
@@ -591,6 +707,7 @@ mod tests {
                 .receiver
                 .recv_timeout(Duration::from_secs(30))
                 .expect("Viewer worker stalled")
+                .event
             {
                 Event::Tile(_) => tiles += 1,
                 Event::Denoised { pixels, samples } => {

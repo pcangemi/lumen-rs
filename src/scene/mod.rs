@@ -178,7 +178,7 @@ impl Scene {
                 self.accepts_cutout(hit)
             })
     }
-    fn accepts_cutout(&self, hit: &crate::geometry::Hit) -> bool {
+    pub(crate) fn accepts_cutout(&self, hit: &crate::geometry::Hit) -> bool {
         let map = self.materials[hit.material].maps[3];
         map == 0
             || self

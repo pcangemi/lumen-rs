@@ -21,6 +21,8 @@ pub const TILE_SIZE: u32 = 64;
 pub struct RenderControl {
     pub paused: AtomicBool,
     pub cancelled: AtomicBool,
+    /// Interactive requests can discard cancelled films instead of copying a partial image.
+    pub discard_cancelled: bool,
 }
 impl RenderControl {
     pub fn wait_until_ready(&self) -> bool {
@@ -126,6 +128,17 @@ pub fn cpu(
     scene: &Scene,
     settings: RenderSettings,
     control: &RenderControl,
+    on_tile: impl FnMut(TileUpdate),
+) -> Result<RenderOutput> {
+    cpu_with_camera(scene, scene.camera, settings, control, on_tile)
+}
+
+/// Reuse immutable geometry while accumulating a fresh film for a selected viewpoint.
+pub fn cpu_with_camera(
+    scene: &Scene,
+    camera: crate::camera::Camera,
+    settings: RenderSettings,
+    control: &RenderControl,
     mut on_tile: impl FnMut(TileUpdate),
 ) -> Result<RenderOutput> {
     settings.validate()?;
@@ -152,7 +165,7 @@ pub fn cpu(
                             break;
                         }
                         let mut rng = Rng::new(index as u32, sample, settings.seed);
-                        let ray = scene.camera.ray(
+                        let ray = camera.ray(
                             index as u32 % settings.width,
                             index as u32 / settings.width,
                             settings.width,
@@ -183,6 +196,10 @@ pub fn cpu(
             });
         }
     }
+    anyhow::ensure!(
+        !(control.discard_cancelled && control.cancelled.load(Ordering::Relaxed)),
+        "Render cancelled"
+    );
     let samples: Vec<u32> = film.iter().map(|pixel| pixel.samples).collect();
     let invalid_samples = film.iter().map(|pixel| pixel.invalid_samples).sum();
     let stats = stats(

@@ -22,6 +22,9 @@ struct Args {
     scene: String,
     #[arg(long)]
     scene_file: Option<PathBuf>,
+    /// Load a camera and exposure saved by the viewer's F5 shortcut.
+    #[arg(long)]
+    viewpoint: Option<PathBuf>,
     #[arg(long, value_enum, default_value = "auto")]
     backend: Backend,
     #[arg(long, default_value_t = 1920)]
@@ -63,7 +66,7 @@ struct Args {
     export_comparison: Option<PathBuf>,
 }
 fn main() -> Result<()> {
-    let args = Args::parse();
+    let mut args = Args::parse();
     if args.list_devices {
         println!(
             "CPU: {} available threads",
@@ -105,11 +108,20 @@ fn main() -> Result<()> {
     };
     settings.validate()?;
     let aspect = args.width as f32 / args.height as f32;
-    let mut scene = if let Some(path) = args.scene_file {
-        scene::load(&path, aspect)?
+    let mut scene = if let Some(path) = &args.scene_file {
+        scene::load(path, aspect)?
     } else {
         scene::preset(&args.scene, aspect)?
     };
+    if let Some(path) = &args.viewpoint {
+        let scene_key = args.scene_file.as_ref().map_or_else(
+            || args.scene.clone(),
+            |path| path.to_string_lossy().into_owned(),
+        );
+        let viewpoint = lumen_rs::navigation::Viewpoint::load(path, &scene_key, aspect)?;
+        scene.camera = viewpoint.camera;
+        args.exposure = viewpoint.exposure;
+    }
     if let Some(path) = args.obj {
         scene.import_obj(&path, glam::Vec3::ZERO, args.obj_scale, 0.0, None)?;
         scene.finish()?;

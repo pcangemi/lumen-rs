@@ -1191,3 +1191,120 @@ fn metal_adaptive_sampling_is_batch_invariant() {
     assert_eq!(single.stats.invalid_samples, 0);
     assert_eq!(batched.stats.invalid_samples, 0);
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "requires a native Metal device"]
+fn metal_resident_camera_reset_preserves_final_pixels() {
+    use lumen_rs::{
+        metal_backend::{MetalRenderer, MetalTuning},
+        progressive::RenderControl,
+    };
+    let scene = lumen_rs::scene::preset("studio", 1.5).unwrap();
+    let control = RenderControl::default();
+    let settings = lumen_rs::render::RenderSettings {
+        width: 48,
+        height: 32,
+        samples: 32,
+        max_depth: 16,
+        ..Default::default()
+    };
+    let baseline = lumen_rs::metal_backend::render(&scene, settings).unwrap();
+    for tuning in [
+        MetalTuning::default(),
+        MetalTuning {
+            compact_geometry: true,
+            ..Default::default()
+        },
+        MetalTuning {
+            specialize_scene: true,
+            compact_stack: true,
+            compact_geometry: false,
+            threadgroup_limit: 128,
+        },
+        MetalTuning {
+            specialize_scene: true,
+            compact_stack: true,
+            compact_geometry: false,
+            threadgroup_limit: 64,
+        },
+    ] {
+        let mut renderer = MetalRenderer::with_tuning(&scene, tuning).unwrap();
+        let gpu_preview = renderer
+            .preview(scene.camera, 48, 32, &control)
+            .unwrap()
+            .unwrap();
+        let cpu_preview =
+            lumen_rs::navigation::preview_cpu(&scene, scene.camera, 48, 32, &control).unwrap();
+        let mean_error = gpu_preview
+            .iter()
+            .zip(&cpu_preview)
+            .map(|(a, b)| (*a - *b).abs().max_element())
+            .sum::<f32>()
+            / gpu_preview.len() as f32;
+        assert!(
+            mean_error < 0.0001,
+            "Preview CPU/Metal mismatch: {mean_error}"
+        );
+        let mut moved = scene.camera;
+        moved.origin[0] += 0.4;
+        renderer
+            .render(moved, settings, &control, false, |_| {})
+            .unwrap();
+        let restored = renderer
+            .render(scene.camera, settings, &control, false, |_| {})
+            .unwrap();
+        assert_eq!(
+            restored.pixels, baseline.pixels,
+            "Camera reset or compiler variant changed final pixels: {tuning:?}"
+        );
+        assert_eq!(restored.samples, baseline.samples);
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "requires a native Metal device"]
+fn metal_point_preview_preserves_depth_and_camera_orientation() {
+    use lumen_rs::{
+        camera::Camera,
+        metal_points::PointRenderer,
+        point_cloud::{Point, PointCloud},
+    };
+    let cloud = PointCloud {
+        points: vec![
+            Point {
+                position: [0.0, 0.0, 0.0, 1.0],
+                color: [1.0, 0.0, 0.0, 1.0],
+            },
+            Point {
+                position: [0.0, 0.0, -1.0, 1.0],
+                color: [0.0, 0.0, 1.0, 1.0],
+            },
+            Point {
+                position: [0.0, 0.0, 4.0, 1.0],
+                color: [0.0, 1.0, 0.0, 1.0],
+            },
+        ],
+    };
+    let camera = Camera::new(
+        glam::Vec3::new(0.0, 0.0, 3.0),
+        glam::Vec3::ZERO,
+        60.0,
+        1.0,
+        0.0,
+        3.0,
+    );
+    let mut renderer = PointRenderer::new(&cloud).unwrap();
+    let pixels = renderer.render(camera, 65, 65, 3).unwrap();
+    let center = pixels[32 * 65 + 32];
+    assert!(
+        (center >> 16) > 150 && (center & 0xffff) == 0,
+        "Front point must occlude the rear point: {center:06x}"
+    );
+    assert_eq!(pixels[0], 0x101921);
+    let mut moved = camera;
+    moved.origin[0] += 0.3;
+    assert_ne!(pixels, renderer.render(moved, 65, 65, 3).unwrap());
+    assert_eq!(pixels, renderer.render(camera, 65, 65, 3).unwrap());
+}

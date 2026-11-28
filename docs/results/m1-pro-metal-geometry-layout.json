@@ -1,0 +1,147 @@
+{
+  "bounces": 50,
+  "bvh_depth": 31,
+  "device": "Apple M1 Pro",
+  "height": 360,
+  "primitives": 3313317,
+  "runs": [
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 5.804265499231406,
+        "max_command_seconds": 0.03974945831578225,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 6.1312595,
+      "repeat": 0,
+      "setup_seconds": 2.169505625,
+      "tuning": {
+        "compact_geometry": false,
+        "compact_stack": false,
+        "specialize_scene": false,
+        "threadgroup_limit": 0
+      },
+      "variant": "generic"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 5.570376292336732,
+        "max_command_seconds": 0.03925012506078929,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 5.931396209,
+      "repeat": 0,
+      "setup_seconds": 1.590316417,
+      "tuning": {
+        "compact_geometry": true,
+        "compact_stack": false,
+        "specialize_scene": false,
+        "threadgroup_limit": 0
+      },
+      "variant": "compact-geometry"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 5.621251083095558,
+        "max_command_seconds": 0.050432875053957105,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 5.928926917,
+      "repeat": 1,
+      "setup_seconds": 0.452850291,
+      "tuning": {
+        "compact_geometry": true,
+        "compact_stack": false,
+        "specialize_scene": false,
+        "threadgroup_limit": 0
+      },
+      "variant": "compact-geometry"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 5.8466815003193915,
+        "max_command_seconds": 0.04270712495781481,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 6.120699333,
+      "repeat": 1,
+      "setup_seconds": 0.412945875,
+      "tuning": {
+        "compact_geometry": false,
+        "compact_stack": false,
+        "specialize_scene": false,
+        "threadgroup_limit": 0
+      },
+      "variant": "generic"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 5.91991083312314,
+        "max_command_seconds": 0.044207916711457074,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 6.1586915,
+      "repeat": 2,
+      "setup_seconds": 0.313326625,
+      "tuning": {
+        "compact_geometry": false,
+        "compact_stack": false,
+        "specialize_scene": false,
+        "threadgroup_limit": 0
+      },
+      "variant": "generic"
+    },
+    {
+      "exact_pixels": true,
+      "gpu": {
+        "command_count": 240,
+        "gpu_seconds": 5.7677769178990275,
+        "max_command_seconds": 0.04198687500320375,
+        "max_samples_per_command": 1,
+        "threads_per_threadgroup": 128,
+        "tile_size": 128
+      },
+      "max_difference": 0.0,
+      "render_seconds": 6.089969541,
+      "repeat": 2,
+      "setup_seconds": 0.541229125,
+      "tuning": {
+        "compact_geometry": true,
+        "compact_stack": false,
+        "specialize_scene": false,
+        "threadgroup_limit": 0
+      },
+      "variant": "compact-geometry"
+    }
+  ],
+  "samples": 16,
+  "scene": "interior-neon",
+  "width": 640,
+  "date": "2026-11-28",
+  "decision": "Experimental only. About 3.3% median time reduction at 640x360 costs an additional 64 bytes per primitive (about 212 MB in this scene). No Full HD speed claim; not enabled by default.",
+  "conditions": "Other renderer paused/closed; no concurrent render or compilation during measured runs."
+}

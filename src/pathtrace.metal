@@ -1,7 +1,20 @@
 #include <metal_stdlib>
 using namespace metal;
+#ifndef LUMEN_BVH_STACK_SIZE
+#define LUMEN_BVH_STACK_SIZE 64
+#endif
+constant bool compact_geometry_feature [[function_constant(2)]];
+constant bool compact_geometry = is_function_constant_defined(compact_geometry_feature) ? compact_geometry_feature : false;
+constant bool volume_feature [[function_constant(0)]];
+constant bool opacity_feature [[function_constant(1)]];
+constant bool has_volumes = is_function_constant_defined(volume_feature) ? volume_feature : true;
+constant bool has_opacity = is_function_constant_defined(opacity_feature) ? opacity_feature : true;
 struct Primitive {
     float4 p0, p1, p2, n0, n1, n2, uv01, uv2;
+    uint4 info;
+};
+struct IntersectionPrimitive {
+    float4 p0, p1, p2;
     uint4 info;
 };
 struct Node {
@@ -103,7 +116,8 @@ bool box_hit(float3 lo, float3 hi, Ray r, float limit) {
 }
 // Visibility needs distance only for opaque surfaces. Keep normals and UVs out of
 // that path, particularly the transcendental functions used for sphere UVs.
-bool primitive_intersection(device const Primitive &p, Ray ray, float limit,
+template<typename PrimitiveData>
+bool primitive_intersection(device const PrimitiveData &p, Ray ray, float limit,
                             thread SurfaceIntersection &intersection) {
     float t;
     if (p.info.x == 0) {
@@ -182,11 +196,11 @@ float thin_transmittance(float cosine, float ior) {
     float r = fresnel(clamp(abs(cosine), 0.0f, 1.0f), 1.0f, ior);
     return (1 - r) / (1 + r);
 }
-bool intersect_impl(device const Primitive *p, device const Node *nodes, Ray ray, float limit,
+bool intersect_impl(device const Primitive *p, device const IntersectionPrimitive *geometry, device const Node *nodes, Ray ray, float limit,
                bool any_hit, thread Hit &hit, device const Material *materials,
                device const float4 *texels, device const uint4 *textures,
                bool transmit_sheets, thread float &visibility) {
-    uint stack[64];
+    uint stack[LUMEN_BVH_STACK_SIZE];
     uint sp = 1;
     stack[0] = 0;
     bool found = false;
@@ -199,14 +213,18 @@ bool intersect_impl(device const Primitive *p, device const Node *nodes, Ray ray
         if (node.data.y > 0) {
             for (uint i = node.data.x; i < node.data.x + node.data.y; i++) {
                 SurfaceIntersection intersection;
-                if (primitive_intersection(p[i], ray, limit, intersection)) {
-                    Material material = materials[p[i].info.y];
-                    if (any_hit && material.maps.w == 0 &&
+                bool found_intersection = compact_geometry
+                    ? primitive_intersection(geometry[i], ray, limit, intersection)
+                    : primitive_intersection(p[i], ray, limit, intersection);
+                if (found_intersection) {
+                    uint material_index = compact_geometry ? geometry[i].info.y : p[i].info.y;
+                    Material material = materials[material_index];
+                    if (any_hit && (!has_opacity || material.maps.w == 0) &&
                         (!transmit_sheets || material.surface.z != 2))
                         return true;
-                    if (material.maps.w > 0 || (transmit_sheets && material.surface.z == 2)) {
+                    if ((has_opacity && material.maps.w > 0) || (transmit_sheets && material.surface.z == 2)) {
                         Hit candidate = surface_hit(p[i], ray, i, intersection);
-                        if (material.maps.w > 0 && texture_sample(texels, textures, material.maps.w - 1,
+                        if ((has_opacity && material.maps.w > 0) && texture_sample(texels, textures, material.maps.w - 1,
                                                                   surface_uv(material, candidate))
                                                            .x < .5f)
                             continue;
@@ -235,17 +253,17 @@ bool intersect_impl(device const Primitive *p, device const Node *nodes, Ray ray
         hit = surface_hit(p[closest_primitive], ray, closest_primitive, closest_intersection);
     return found;
 }
-bool intersect(device const Primitive *p, device const Node *nodes, Ray ray, float limit,
+bool intersect(device const Primitive *p, device const IntersectionPrimitive *geometry, device const Node *nodes, Ray ray, float limit,
                bool any_hit, thread Hit &hit, device const Material *materials,
                device const float4 *texels, device const uint4 *textures) {
     float visibility = 1;
-    return intersect_impl(p, nodes, ray, limit, any_hit, hit, materials, texels, textures, false, visibility);
+    return intersect_impl(p, geometry, nodes, ray, limit, any_hit, hit, materials, texels, textures, false, visibility);
 }
-float shadow_transmittance(device const Primitive *p, device const Node *nodes, Ray ray, float limit,
+float shadow_transmittance(device const Primitive *p, device const IntersectionPrimitive *geometry, device const Node *nodes, Ray ray, float limit,
                            device const Material *materials, device const float4 *texels, device const uint4 *textures) {
     float visibility = 1;
     Hit blocker;
-    bool blocked = intersect_impl(p, nodes, ray, limit, true, blocker, materials, texels, textures, true, visibility);
+    bool blocked = intersect_impl(p, geometry, nodes, ray, limit, true, blocker, materials, texels, textures, true, visibility);
     return blocked ? 0 : visibility;
 }
 float3 base_color(Material m, float3 p) {
@@ -488,7 +506,7 @@ float medium_density(Medium medium, float3 position) {
     return density * density * (3 - 2 * density);
 }
 float medium_sample(Medium medium, Ray ray, float limit, thread uint &rng) {
-    if (medium.lo.w <= 0)
+    if (!has_volumes || medium.lo.w <= 0)
         return -1;
     float distance, end;
     if (!medium_interval(medium, ray, limit, distance, end))
@@ -503,7 +521,7 @@ float medium_sample(Medium medium, Ray ray, float limit, thread uint &rng) {
     }
 }
 float medium_transmittance(Medium medium, Ray ray, float limit, thread uint &rng) {
-    if (medium.lo.w <= 0)
+    if (!has_volumes || medium.lo.w <= 0)
         return 1;
     float distance, end;
     if (!medium_interval(medium, ray, limit, distance, end))
@@ -537,7 +555,7 @@ float3 sample_phase(Medium medium, float3 forward, thread uint &rng) {
     float angle = 2 * PI * random_float(rng), s = sqrt(max(0.0f, 1 - c * c));
     return to_world(float3(s * cos(angle), s * sin(angle), c), forward);
 }
-float3 volume_light(device const Primitive *primitives, device const Node *nodes,
+float3 volume_light(device const Primitive *primitives, device const IntersectionPrimitive *geometry, device const Node *nodes,
                     device const Material *materials, device const Light *lights,
                     constant Params &params, float3 position, float3 forward, thread uint &rng,
                     device const float4 *texels, device const uint4 *textures) {
@@ -575,7 +593,7 @@ float3 volume_light(device const Primitive *primitives, device const Node *nodes
     float phase = medium_phase(params.medium, dot(forward, direction));
     float3 target = offset(light_position, normal, -direction), shadow = target - position;
     Ray ray = {position, normalize(shadow)};
-    float visibility = shadow_transmittance(primitives, nodes, ray, length(shadow) - 1e-5f,
+    float visibility = shadow_transmittance(primitives, geometry, nodes, ray, length(shadow) - 1e-5f,
                                            materials, texels, textures);
     if (visibility <= 0)
         return float3(0);
@@ -583,7 +601,7 @@ float3 volume_light(device const Primitive *primitives, device const Node *nodes
     return materials[primitive.info.y].emission.xyz *
            (transmittance * visibility * phase * power(pdf, phase * visibility) / max(pdf, 1e-20f));
 }
-float3 trace(device const Primitive *primitives, device const Node *nodes,
+float3 trace(device const Primitive *primitives, device const IntersectionPrimitive *geometry, device const Node *nodes,
              device const Material *mats, device const Light *lights, constant Params &params,
              Ray ray, thread uint &rng, device const float4 *texels, device const uint4 *textures) {
     float3 radiance = 0, beta = 1, prev_p = ray.o;
@@ -594,14 +612,14 @@ float3 trace(device const Primitive *primitives, device const Node *nodes,
     for (uint depth = 0; depth < params.config.x; depth++) {
         Hit h;
         bool surface_found =
-            intersect(primitives, nodes, ray, INFINITY, false, h, mats, texels, textures);
+            intersect(primitives, geometry, nodes, ray, INFINITY, false, h, mats, texels, textures);
         float collision = medium_count == 0 ? medium_sample(params.medium, ray,
                                                             surface_found ? h.t : INFINITY, rng)
                                             : -1;
         if (collision >= 0) {
             float3 position = ray.o + collision * ray.d;
             beta *= params.medium.scattering.xyz;
-            radiance += beta * volume_light(primitives, nodes, mats, lights, params, position,
+            radiance += beta * volume_light(primitives, geometry, nodes, mats, lights, params, position,
                                             ray.d, rng, texels, textures);
             float3 direction = sample_phase(params.medium, ray.d, rng);
             prev_pdf = medium_phase(params.medium, dot(ray.d, direction));
@@ -710,7 +728,7 @@ float3 trace(device const Primitive *primitives, device const Node *nodes,
                     float3 origin = offset(h.p, h.g, wi), end = offset(lp, ln, -wi),
                            shadow = end - origin;
                     Ray sr = {origin, normalize(shadow)};
-                    float visibility = shadow_transmittance(primitives, nodes, sr, length(shadow) - 1e-5f,
+                    float visibility = shadow_transmittance(primitives, geometry, nodes, sr, length(shadow) - 1e-5f,
                                                             mats, texels, textures);
                     if (visibility > 0)
                         radiance += beta *
@@ -750,6 +768,7 @@ pathtrace(device const Primitive *primitives [[buffer(0)]], device const Node *n
           device float4 *film [[buffer(4)]], device float4 *moments [[buffer(5)]],
           constant Params &params [[buffer(6)]], device const float4 *texels [[buffer(7)]],
           device const uint4 *textures [[buffer(8)]],
+          device const IntersectionPrimitive *geometry [[buffer(9)]],
           uint local_id [[thread_position_in_grid]]) {
     if (local_id >= params.tile.z * params.tile.w)
         return;
@@ -771,7 +790,7 @@ pathtrace(device const Primitive *primitives [[buffer(0)]], device const Node *n
         float3 o = (c.right.xyz * xy.x + c.up.xyz * xy.y) * c.origin.w;
         Ray ray = {c.origin.xyz + o, normalize(d * c.forward.w - o)};
         float3 color =
-            trace(primitives, nodes, materials, lights, params, ray, rng, texels, textures);
+            trace(primitives, geometry, nodes, materials, lights, params, ray, rng, texels, textures);
         if (!all(isfinite(color))) {
             moment.w += 1;
             color = 0;
@@ -793,4 +812,44 @@ pathtrace(device const Primitive *primitives [[buffer(0)]], device const Node *n
     }
     film[id] = sum;
     moments[id] = moment;
+}
+
+// Navigation-only headlight preview. This kernel never contributes to the path-tracing film.
+kernel void navigation_preview(
+    device const Primitive *primitives [[buffer(0)]], device const Node *nodes [[buffer(1)]],
+    device const Material *materials [[buffer(2)]], device float4 *film [[buffer(4)]],
+    constant Params &params [[buffer(6)]], device const float4 *texels [[buffer(7)]],
+    device const uint4 *textures [[buffer(8)]], device const IntersectionPrimitive *geometry [[buffer(9)]],
+    uint local_id [[thread_position_in_grid]]) {
+    if (local_id >= params.tile.z * params.tile.w) return;
+    uint x = params.tile.x + local_id % params.tile.z;
+    uint y = params.tile.y + local_id / params.tile.z;
+    Camera c = params.camera;
+    float sx = 2 * (float(x) + .5f) / float(params.image.x) - 1;
+    float sy = 1 - 2 * (float(y) + .5f) / float(params.image.y);
+    Ray ray = {c.origin.xyz, normalize(c.forward.xyz + sx * c.right.w * c.right.xyz + sy * c.up.w * c.up.xyz)};
+    float3 tint = 1, result = 0;
+    bool resolved = false;
+    for (uint depth = 0; depth < 8; depth++) {
+        Hit h;
+        if (!intersect(primitives, geometry, nodes, ray, INFINITY, false, h, materials, texels, textures)) {
+            result += tint * max(float3(.12f), mix(params.horizon.xyz, params.sky.xyz, clamp(ray.d.y * .5f + .5f, 0.0f, 1.0f)));
+            resolved = true;
+            break;
+        }
+        Material m = materials[h.material];
+        float facing = abs(dot(h.n, -ray.d));
+        if (m.surface.z > .5f) {
+            float edge = 1 - facing;
+            result += tint * (.025f + .20f * edge * edge * edge);
+            tint *= .92f;
+            ray.o = offset(h.p, h.g, ray.d);
+            continue;
+        }
+        result += tint * (surface_color(m, h, texels, textures) * (.18f + .82f * facing) + min(m.emission.xyz, float3(2)));
+        resolved = true;
+        break;
+    }
+    if (!resolved) result += tint * .12f;
+    film[y * params.image.x + x] = float4(result, 1);
 }
