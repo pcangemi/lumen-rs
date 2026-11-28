@@ -1,0 +1,8 @@
+newmtl material_0
+Kd 1 1 1
+Pr 1
+Pm 0
+map_Kd texture-1.jpg
+norm texture-0.jpg
+map_Pr texture-2-1.png
+map_Pm texture-2-2.png

@@ -97,3 +97,23 @@ using the credited CC0 linen map for subtle yarn variation.
 The ceramic dish, brass support, incense stick, ash and ember are original
 procedural project geometry. The smoke is an original static procedural
 density field rendered with the engine's participating-medium transport.
+
+## Coastal villa
+
+- **Modern four-bedroom villa with pool**, [Innerscene](https://www.innerscene.com/tools/library/3d-parts/modern-four-bedroom-villa-with-pool-3d-model-ec51544e), **CC0**. The source building, interior rooms, doors, glazing and fittings are retained. Its original pool and timber deck are replaced by this project's tiled basin and terrace. Materials are adapted to pale mineral plaster, stone and timber; small construction bevels and a timber-lined canopy are added. This is an adapted architectural model, not a scan of a Californian property.
+- **Pool Deck Set** and **Canopy Daybed**, [vinish.dev](https://vinish.dev/free-3d-models/outdoor-furniture), **CC BY 4.0**. Original full source meshes and texture pixels; see their bundled modification notices.
+- **Outdoor Table Chair Set 01**, **Coast Line 02**, **Grass Bermuda 01**, **Potted Plant 04**, **Quiver Tree 01** and **Shrub 04**, [Poly Haven](https://polyhaven.com/models), **CC0**. Full source geometry, 2K source maps and original UVs/normals. Grass variants are exported individually and scattered. Separate source opacity maps restore the grass and shrub cutouts omitted by their glTF exports. The coastline preserves all 756,940 source triangles. Source plant scales and placement are adapted for the landscape.
+- **White Sandstone Blocks 02**, **White Plaster 02**, **Grass Ground**, **Oak Wood Planks** and **Concrete Floor Worn 001**, [Poly Haven](https://polyhaven.com/textures), **CC0**. Original 2K color, OpenGL normal and roughness maps. The scene adjusts material tint and color-map blend strength; source pixels are not repainted.
+- The photographed sky and tea set reuse the sources credited above.
+
+Individual source links, pinned file URLs and SHA-256 checksums are in
+[`models/coastal-sources.json`](models/coastal-sources.json). Reproduction:
+`scripts/prepare-coastal-assets.py`, executed with Blender. It preserves source
+mesh detail, extracts packed linear data channels and folds exactly constant
+channels into scalar material factors. It does not decimate or resize the assets.
+
+The blue and gold mosaic, dolphin silhouette, tiled steps, coping, paving,
+landscape layout and wave geometry are original project work. The architectural
+composition is informed by the [Carmel Beach House by MIST/EYRC](https://www.mistarchitects.com/carmelbeachhouse),
+particularly its deep overhangs, mineral palette and connection between glazing,
+terrace and water. No reference photographs or architectural drawings are redistributed.

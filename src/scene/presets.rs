@@ -1,13 +1,14 @@
 //! Built-in demonstration scenes; bundled assets require no runtime downloads.
 use super::*;
 
-pub const PRESET_NAMES: [&str; 6] = [
+pub const PRESET_NAMES: [&str; 7] = [
     "studio",
     "interior",
     "interior-night",
     "interior-neon",
     "outdoor",
     "clouds",
+    "coastal-villa",
 ];
 
 pub fn preset(name: &str, aspect: f32) -> Result<Scene> {
@@ -18,8 +19,9 @@ pub fn preset(name: &str, aspect: f32) -> Result<Scene> {
         "interior-neon" => super::apartment::build(aspect, super::apartment::Lighting::NightNeon)?,
         "outdoor" => outdoor(aspect)?,
         "clouds" => clouds(aspect)?,
+        "coastal-villa" => super::coastal_villa::build(aspect)?,
         _ => bail!(
-            "Unknown scene: {name}. Choose studio, interior, interior-night, interior-neon, outdoor, or clouds"
+            "Unknown scene: {name}. Choose studio, interior, interior-night, interior-neon, outdoor, clouds, or coastal-villa"
         ),
     };
     s.finish()?;

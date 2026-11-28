@@ -203,6 +203,21 @@ The courtyard includes a closed wavy water volume, stone coping, a timber pergol
 
 Original geometry and the vessel generator are included. The Poly Haven furniture and scanned textures are redistributed under CC0; the Wayfair sofa and rattan pendant use CC BY 4.0; see [asset credits](assets/CREDITS.md).
 
+## Coastal villa and mosaic pool
+
+```bash
+./target/release/viewer --backend metal --scene coastal-villa --samples 2048 --bounces 50
+```
+
+A separate seaside villa scene combines imported furniture and vegetation, a
+scanned rocky coast, a planted lawn and a blue mosaic pool with a gold dolphin.
+The water has displaced wave geometry, refraction, Fresnel reflection and volume
+absorption. [Sources, construction, pool close-up and optical limits](docs/coastal-villa.md).
+
+![Coastal villa](renders/coastal-villa.png)
+
+![Submerged gold mosaic dolphin](renders/coastal-pool.png)
+
 ## Import and scene files
 
 ```bash

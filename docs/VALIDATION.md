@@ -2,13 +2,44 @@
 
 Rust and Metal checks updated on 2026-11-28 with Apple M1 Pro and 10 CPU threads. Blender 5.3.0 checks below are retained from earlier validation runs.
 
+## Coastal villa update
+
+The new `coastal-villa` preset uses licensed source meshes and 2K material maps,
+with 4 cm blue/gold mosaic geometry and a closed wind-displaced water volume.
+The new gravity-wave surface is deterministic and its perimeter meets the
+closed side faces. Water-grid vertices are evaluated once and shared during
+assembly; existing standing-wave presets retain their surface function.
+
+- Formatting, all-target Clippy with warnings denied and the standard release
+  suite passed: 18 library, 5 viewer and 29 physics tests (52 total).
+- Metal shader compilation and all 10 native GPU regressions passed, including
+  the new scene, exact batch invariance, camera resets and queued cancellation.
+- All 56 downloaded source files passed their pinned SHA-256 checks; converted
+  material texture references resolve locally.
+- Full HD wide and pool-detail renders use 50 bounces, zero adaptive stopping,
+  original mesh detail and source texture resolution. Raw PNG/EXR files remain
+  beside the denoised previews locally.
+- Render records: [villa](../renders/coastal-villa.json) and
+  [pool detail](../renders/coastal-pool.json). These are individual render timings,
+  not a controlled benchmark or a comparison with Cycles.
+
+The final wide view contains 6,148,756 primitives, 3,827,343 BVH nodes and 83
+textures (5,420,733,904 packed scene bytes). At 1920 × 1080 and 256 samples,
+transport took 123.42 seconds and denoising took 3.40 seconds. It completed with
+zero invalid samples and a longest GPU command of 25.25 ms. These measurements
+include the complete source meshes and mosaic geometry. The pool close-up uses
+512 samples at the same resolution and bounce limit: 517.10 seconds of transport,
+3.25 seconds of denoising, zero invalid samples and a longest GPU command of
+28.60 ms. Neither final render reported a Metal command-buffer failure.
+
 ## Current automated checks
 
 - Rust formatting and Clippy with warnings denied: passed.
-- Release library suite: 10 passed; the optional OIDN test is excluded.
-- Standard release physics suite: 28 passed; five GPU tests are deliberately ignored in this suite.
+- Release library suite: 18 passed; the optional OIDN test is excluded.
+- Release viewer suite: five passed; the optional worker/denoiser test is excluded.
+- Standard release physics suite: 29 passed; ten GPU tests are deliberately ignored in this suite and run separately below.
 - Metal shader compilation: passed.
-- Metal runtime regressions on the M1 Pro: five passed, covering all six presets, finite samples, exact batch invariance, partial film edges, adaptive stopping, micrometer-scale triangle visibility and fine smoke attenuation.
+- Metal runtime regressions on the M1 Pro: ten passed, covering all seven presets, finite samples, exact batch invariance, partial film edges, adaptive stopping, micrometer-scale triangle visibility, fine smoke attenuation, point-preview depth/orientation, dense records, camera resets and cancellation.
 - Viewer cache regressions: passed for changed pixels, exposure, resizing, raw/clean selection and live tile outlines. The optional worker test delivered the final denoised image before completion.
 - Night lighting regression: all three lamp emitters are active, the pendant retains its 80 mm bulb envelope, and daylight emitters are absent.
 - All seven public street lamps are active; any projected within the camera field of view are occluded from direct sight.
@@ -27,13 +58,14 @@ The standard suite also covers linear PBR maps, mirrored tangent frames, leaf op
 | Scene | CPU | Metal |
 | --- | ---: | ---: |
 | Studio | 777.850 | 777.856 |
-| Interior | 668.218 | 666.081 |
-| Interior night | 223.591 | 224.750 |
-| Interior neon | 454.132 | 453.770 |
+| Interior | 168.296 | 168.253 |
+| Interior night | 258.171 | 260.459 |
+| Interior neon | 454.438 | 454.906 |
 | Outdoor | 845.823 | 845.540 |
 | Clouds | 1222.799 | 1222.799 |
+| Coastal villa | 1461.806 | 1460.378 |
 
-Mean luminance differs by less than 0.6% in this run. GPU results are exactly equal across requested batch limits and offline/progressive rendering, including adaptive command sizing. A separate 277 × 71 render checks non-divisible film edges and a 17-sample final partial pass. Statistical CPU/GPU agreement does not establish equality of every path.
+Mean luminance differs by less than 0.9% in this run (0.10% for the coastal villa). GPU results are exactly equal across requested batch limits and offline/progressive rendering, including adaptive command sizing. A separate 277 × 71 render checks non-divisible film edges and a 17-sample final partial pass. Statistical CPU/GPU agreement does not establish equality of every path.
 
 ## Perimeter lighting and script neon
 
@@ -41,7 +73,7 @@ The `interior-neon` preset adds wall-mounted LED cornices around all four walls,
 
 The pendant, sofa, table and rug use the large wall panel's centre line. The 2.4 m neon sign is centred above the sideboard. Original italic centre lines retain a level baseline and underline endpoints; crossovers lift toward the room. Separate emitting cores, thin-shell Fresnel glass, electrode fittings, clips and connected wiring form the sign. The glass jacket does not model cylindrical refraction or dispersion. Source intensities are scene-tuned RGB values, not measured lumens.
 
-The library suite covers alignment, level lettering, finite neon geometry, glass transmission and real light visibility. In the current 73 × 47 / 64-sample / eight-bounce check, the neon scene's CPU and Metal luminance sums differ by about 0.08%; Metal images are exactly equal across batching and offline/progressive submission. This validates transport consistency, not photographic fidelity or manufacturing accuracy.
+The library suite covers alignment, level lettering, finite neon geometry, glass transmission and real light visibility. In the current 73 × 47 / 64-sample / eight-bounce check, the neon scene's CPU and Metal luminance sums differ by about 0.10%; Metal images are exactly equal across batching and offline/progressive submission. This validates transport consistency, not photographic fidelity or manufacturing accuracy.
 
 The antique panes have closed, nonparallel surfaces with submillimeter waviness. Tests verify outward entry/exit surfaces, approximately 6 mm thickness and small but nonzero changes in transmitted ray direction.
 

@@ -1,0 +1,46 @@
+newmtl material_0
+Kd 1 1 1
+Pr 0.6
+Pm 0
+map_Kd texture-0.jpg
+norm texture-1.jpg
+
+newmtl material_1
+Kd 0.03433980680868217 0.0382043715953465 0.043735029256973465
+Pr 0.5
+Pm 0.5
+
+newmtl material_2
+Kd 0.014443843596092545 0.01520851442291271 0.017641954488384078
+Pr 0.45
+Pm 0.6
+
+newmtl material_3
+Kd 0.5520114015120001 0.5775804404296506 0.6038273388553378
+Pr 0.22
+Pm 1
+
+newmtl material_4
+Kd 0.010960094006488246 0.010960094006488246 0.011612245179743885
+Pr 0.9
+Pm 0
+
+newmtl material_5
+Kd 0.6938717612919899 0.5711248294648731 0.3712376804741491
+Pr 0.92
+Pm 0
+map_Kd texture-2.jpg
+norm texture-3.jpg
+
+newmtl material_6
+Kd 1 1 1
+Pr 0.9
+Pm 0
+map_Kd texture-4.jpg
+
+newmtl material_7
+Kd 1 1 1
+Pr 0.85
+Pm 0
+map_Kd texture-5.jpg
+norm texture-6.jpg

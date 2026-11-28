@@ -1,5 +1,6 @@
 //! Scene ownership, geometry assembly and OBJ / MTL import.
 mod apartment;
+mod coastal_villa;
 mod file;
 mod presets;
 mod water;
