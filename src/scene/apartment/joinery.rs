@@ -61,7 +61,7 @@ pub(super) fn window(
     end: f32,
     paint: usize,
     brass: usize,
-    iron: usize,
+    _iron: usize,
     glass: Glazing,
 ) {
     let x = -4.38;
@@ -222,7 +222,6 @@ pub(super) fn window(
             primitive.n2 = pack_vec3(rotation * unpack_vec3(primitive.n2), 0.0);
         }
     }
-    atmosphere::balcony(scene, start, end, iron);
 }
 
 fn pane(scene: &mut Scene, x: f32, bottom: f32, top: f32, left: f32, right: f32, glass: Glazing) {

@@ -189,7 +189,13 @@ This writes a Full HD close-up to `renders/incense-detail.png`, retaining the ra
 
 The strips use a warm-white RGB tint; source intensity is scene-tuned rather than calibrated in lumens. No postprocessed glow is used to replace light transport. The cornice is an original profile informed by [Orac indirect-lighting guidance](https://www.oracdecor.com/en_ie/faq) and [NOËL & MARQUET installation principles](https://noel-marquet.be/en/faqs/cat4_indirect-lighting), not a manufacturer-certified product replica. Neon construction references include [Krypton Neon component diagrams](https://www.neonshop.com/Tech/specs.html). For the equivalent Blender workflow, see [rounded curve geometry](https://docs.blender.org/manual/en/4.3/modeling/curves/properties/geometry.html) and [Andrew Price's neon tutorial](https://www.blenderguru.com/posts/2019/neon).
 
-The opposite building has individually jointed stone courses, recessed window openings, molded white casements, slightly wavy reflective glazing, projecting sills, cornices, iron railings, shutters and downpipes. Separate rooms and gathered curtains sit behind the glass; some rooms are lit at night. The street lies 7.3 m below the apartment floor. Seven public lamps illuminate the surroundings from below the camera's view, and their reflections follow the same light transport as the interior lamps. The facade and street fittings are original procedural geometry.
+The opposite Haussmann-style building has six occupied levels, continuous balconies at the second and fifth floors, limestone cornices and consoles, recessed casements and a mansard roof with slate, raised zinc seams, dormers and terracotta chimney pots. Window guards and balcony fronts use imported licensed ironwork. Apartments vary in curtain color and opening, shutters, blinds, furnishings and lighting. The street lies 7.3 m below the apartment floor, with seven public lamps lighting the surroundings. Day and night use photographic 4K HDR skies with clouds, shared by background, reflection and indirect-light rays. These distant clouds are environment imagery; the incense retains its separate volume simulation. See [architecture references, models and preview commands](docs/haussmann-exterior.md).
+
+![Haussmann exterior at night](renders/haussmann-night.png)
+
+Full HD development previews: [daytime roof and façade](renders/haussmann-day.png)
+and [imported window railing](renders/haussmann-railing.png). Their sample counts
+and render settings are recorded in the accompanying JSON files.
 
 The courtyard includes a closed wavy water volume, stone coping, a timber pergola and modeled leaves. The clouds preset demonstrates a procedural scattering volume; it is not a weather simulation or a measured atmospheric model.
 

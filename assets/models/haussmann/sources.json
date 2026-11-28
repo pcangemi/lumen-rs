@@ -1,0 +1,30 @@
+[
+  {
+    "name": "juliet-balcony",
+    "url": "https://vinish-models.pages.dev/balconies-and-railings/juliet-balcony.glb",
+    "source": "https://vinish.dev/free-3d-models/balconies-and-railings",
+    "author": "vinish.dev",
+    "license": "CC-BY-4.0",
+    "sha256": "4e49a88f334316282cb05345c0969616f758a32448d99349f5fcf460085ed4e7",
+    "triangles": 4974,
+    "dimensions": [
+      1.6799999475479126,
+      1.0889999866485596,
+      0.2133982630483806
+    ]
+  },
+  {
+    "name": "wrought-iron-balcony",
+    "url": "https://vinish-models.pages.dev/balconies-and-railings/wrought-iron-balcony.glb",
+    "source": "https://vinish.dev/free-3d-models/balconies-and-railings",
+    "author": "vinish.dev",
+    "license": "CC-BY-4.0",
+    "sha256": "f33e02205ccf6200ba4ffd851f9416b04841a52d1fefd3c7e3c039caf7c685d3",
+    "triangles": 13639,
+    "dimensions": [
+      2.359999895095825,
+      1.0450000166893005,
+      0.09650003910064697
+    ]
+  }
+]

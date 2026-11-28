@@ -19,6 +19,7 @@ struct Params {
     camera: Camera,
     sky: [f32; 4],
     horizon: [f32; 4],
+    environment: [f32; 4],
     image: [u32; 4],
     config: [u32; 4],
     adaptive: [f32; 4],
@@ -347,6 +348,7 @@ impl<'a> MetalRenderer<'a> {
                         camera,
                         sky: pack_vec3(scene.sky, 0.0),
                         horizon: pack_vec3(scene.horizon, 0.0),
+                        environment: scene.packed_environment(),
                         image: [s.width, s.height, sample, pass_end],
                         config: [
                             s.max_depth,
@@ -494,6 +496,7 @@ impl<'a> MetalRenderer<'a> {
                 camera,
                 sky: pack_vec3(self.scene.sky, 0.0),
                 horizon: pack_vec3(self.scene.horizon, 0.0),
+                environment: self.scene.packed_environment(),
                 image: [width, height, 0, 1],
                 config: [0; 4],
                 adaptive: [0.0; 4],

@@ -49,7 +49,7 @@ The modern sofa is [GlamVelvetSofa](https://github.com/KhronosGroup/glTF-Sample-
 - [Floor Lamp](https://tevy.dev/models/floor-lamp) by tevy.dev, **CC0 1.0**; [conversion notice](models/arc_floor_lamp/NOTICE.md). Both lamps retain their existing bulb meshes. SHA-256 hashes and download URLs are in `models/lighting-sources.json`.
 - Claude Monet, *Water Lilies* (1906), Art Institute of Chicago, accession 1933.1157. [Museum record](https://www.artic.edu/artworks/16568/water-lilies); [public-domain/CC0 reproduction on Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Claude_Monet_-_Water_Lilies_-_1933.1157_-_Art_Institute_of_Chicago.jpg). The image is mapped at its original aspect ratio onto a shallow canvas mesh, without repainting or generative changes.
 
-The irregular curtains, balcony scrollwork, frame and individual rug yarn loops
+The irregular curtains, frame and individual rug yarn loops
 are original project geometry. The loops are a surface approximation; they do
 not use a dedicated wool-fiber scattering model. Source material radiance is
 chosen for this scene and is not a certified photometric measurement.
@@ -66,9 +66,20 @@ as a construction reference. No manufacturer mesh or image is redistributed.
 The cabinet lamp is original geometry with a separate bulb and a diffuse-transmitting
 shade. Both floor-level lamp leads connect to modeled wall outlets.
 
-The opposite masonry facade, recessed rooms, window glazing, shutters, railings,
-downpipes and public street luminaires are original procedural project geometry.
-They reuse the credited plaster and linen maps.
+The opposite masonry facade, recessed rooms, window glazing, shutters, mansard
+roof, dormers, chimney stacks, downpipes and public street luminaires are original
+procedural project geometry, informed by the [UNESCO Paris heritage atlas](https://whc.unesco.org/en/urban-heritage-atlas/Paris).
+They reuse the credited plaster and linen maps. The imported ironwork is credited below.
+
+## Haussmann exterior and skies
+
+- **Juliet Balcony** and **Wrought Iron Balcony**, by vinish.dev, [source models](https://vinish.dev/free-3d-models/balconies-and-railings), **CC BY 4.0**. The window guards and continuous balcony fronts use adapted source meshes. See [modifications and pinned checksums](models/haussmann/NOTICE.md).
+- **Rooftop Night**, photography by Greg Zaal, [Poly Haven](https://polyhaven.com/a/rooftop_night), **CC0**. Original 4K linear HDR; the scene fades out its rooftop near the horizon and sets exposure for a city evening.
+- **Kloofendal 48d Partly Cloudy (Pure Sky)**, original by Greg Zaal, sky edits by Jarod Guest, [Poly Haven](https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky), **CC0**. Original 4K linear HDR.
+
+HDR sources and checksums are in `environments/sources.json`. These are photographic
+environment maps, visible to camera, reflection and indirect-light rays. The distant
+clouds are not volumetric objects; the local incense remains a participating medium.
 
 ## Glass guardian lion
 

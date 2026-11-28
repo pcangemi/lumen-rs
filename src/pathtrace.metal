@@ -37,7 +37,7 @@ struct Medium {
 };
 struct Params {
     Camera camera;
-    float4 sky, horizon;
+    float4 sky, horizon, environment;
     uint4 image, config;
     float4 adaptive;
     uint4 tile;
@@ -363,6 +363,19 @@ float3 texture_sample(device const float4 *texels, device const uint4 *textures,
                    texture_texel(texels, info, ix + 1, iy + 1), fract(x));
     return mix(a, b, fract(y));
 }
+float3 environment_radiance(float3 direction, constant Params &params,
+                            device const float4 *texels, device const uint4 *textures) {
+    if (params.environment.x > 0) {
+        uint index = uint(params.environment.x) - 1;
+        float u = atan2(direction.z, direction.x) / (2 * PI) + .5f + params.environment.z / (2 * PI);
+        float v = 1 - acos(clamp(direction.y, -1.0f, 1.0f)) / PI;
+        float half_texel = .5f / float(textures[index].z);
+        float3 radiance = texture_sample(texels, textures, index, float2(u, clamp(v, half_texel, 1 - half_texel))) * params.environment.y;
+        float t = params.environment.w > 0 ? clamp(direction.y / params.environment.w, 0.0f, 1.0f) : 1.0f;
+        return mix(params.horizon.xyz, radiance, t * t * (3 - 2 * t));
+    }
+    return mix(params.horizon.xyz, params.sky.xyz, clamp(direction.y * .5f + .5f, 0.0f, 1.0f));
+}
 float2 surface_uv(Material material, Hit hit) {
     if (material.detail.w >= 0)
         return hit.uv * material.detail.w;
@@ -635,8 +648,7 @@ float3 trace(device const Primitive *primitives, device const IntersectionPrimit
             continue;
         }
         if (!surface_found) {
-            radiance += beta * mix(params.horizon.xyz, params.sky.xyz,
-                                   clamp(ray.d.y * .5f + .5f, 0.0f, 1.0f));
+            radiance += beta * environment_radiance(ray.d, params, texels, textures);
             break;
         }
         if (medium_count > 0)
@@ -833,7 +845,7 @@ kernel void navigation_preview(
     for (uint depth = 0; depth < 8; depth++) {
         Hit h;
         if (!intersect(primitives, geometry, nodes, ray, INFINITY, false, h, materials, texels, textures)) {
-            result += tint * max(float3(.12f), mix(params.horizon.xyz, params.sky.xyz, clamp(ray.d.y * .5f + .5f, 0.0f, 1.0f)));
+            result += tint * max(float3(.12f), environment_radiance(ray.d, params, texels, textures));
             resolved = true;
             break;
         }

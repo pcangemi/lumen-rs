@@ -1,0 +1,20 @@
+[
+  {
+    "name": "rooftop_night",
+    "source": "https://polyhaven.com/a/rooftop_night",
+    "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/4k/rooftop_night_4k.hdr",
+    "license": "CC0-1.0",
+    "md5": "29ff31cdd0d50c4e3ab0ef7bcd55ed7b",
+    "sha256": "06a2e4950fd74501d342e54a233c940ba5f7806536e33fe965c97a1dda53920a",
+    "bytes": 25900304
+  },
+  {
+    "name": "kloofendal_48d_partly_cloudy_puresky",
+    "source": "https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky",
+    "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/4k/kloofendal_48d_partly_cloudy_puresky_4k.hdr",
+    "license": "CC0-1.0",
+    "md5": "816340c969d2e60d659051d13ac3c4dc",
+    "sha256": "3061c00a16ecae748e84fd6c44c04804f539c118bb66325db858bad87b11bf88",
+    "bytes": 20674857
+  }
+]

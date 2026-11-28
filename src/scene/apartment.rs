@@ -5,6 +5,7 @@ mod exterior;
 mod incense;
 mod joinery;
 mod neon;
+mod railings;
 mod sculpture;
 use super::*;
 use crate::geometry::{pack_vec3, unpack_vec3};
@@ -150,6 +151,7 @@ pub fn build(aspect: f32, lighting: Lighting) -> Result<Scene> {
         Vec3::new(-4.4, 3.8, 9.0),
         plaster,
     );
+    let rails = railings::Railings::load(&mut scene, dark)?;
     let windows = [(-3.7, -1.9), (-0.8, 1.0), (2.1, 3.9)];
     let mut previous = -4.5;
     for (start, end) in windows {
@@ -171,6 +173,12 @@ pub fn build(aspect: f32, lighting: Lighting) -> Result<Scene> {
             },
         );
         details::window_surround(&mut scene, start, end, trim, brass);
+        rails.juliet(
+            &mut scene,
+            Vec3::new(-4.65, 0.69, (start + end) * 0.5),
+            end - start + 0.22,
+            -1.0,
+        );
         details::radiator(&mut scene, (start + end) * 0.5, radiator_paint, brass, dark);
         // The bunched cloth lies entirely outside the swept casement opening.
         folded_curtain(&mut scene, start - 0.48, 0.36, curtain);
@@ -182,7 +190,7 @@ pub fn build(aspect: f32, lighting: Lighting) -> Result<Scene> {
         Vec3::new(-4.4, 3.22, 9.0),
         plaster,
     );
-    exterior::build(&mut scene, plaster_texture, linen_texture, night);
+    exterior::build(&mut scene, plaster_texture, linen_texture, night, &rails)?;
 
     mouldings(&mut scene, trim, lighting == Lighting::NightNeon);
     details::wool_rug(&mut scene, &asset_root, layout)?;

@@ -26,9 +26,22 @@ pub fn export(scene: &Scene, settings: RenderSettings, path: &Path) -> Result<()
             .save_with_format(path.join(&filename), image::ImageFormat::OpenExr)?;
         textures.push(filename);
     }
-    let environment = image::Rgb32FImage::from_fn(512, 256, |_, y| {
-        let elevation = ((y as f32 + 0.5) / 256.0 * std::f32::consts::PI).cos();
-        image::Rgb(scene.environment(Vec3::new(0.0, elevation, 0.0)).to_array())
+    let (env_width, env_height) = scene.environment_map.map_or((512, 256), |map| {
+        let descriptor = scene.textures.descriptors[map.texture];
+        (descriptor[1], descriptor[2])
+    });
+    let environment = image::Rgb32FImage::from_fn(env_width, env_height, |x, y| {
+        let azimuth = ((x as f32 + 0.5) / env_width as f32 - 0.5) * std::f32::consts::TAU;
+        let theta = (y as f32 + 0.5) / env_height as f32 * std::f32::consts::PI;
+        image::Rgb(
+            scene
+                .environment(Vec3::new(
+                    theta.sin() * azimuth.cos(),
+                    theta.cos(),
+                    theta.sin() * azimuth.sin(),
+                ))
+                .to_array(),
+        )
     });
     environment.save_with_format(path.join("environment.exr"), image::ImageFormat::OpenExr)?;
     let triangles: Vec<_> = scene

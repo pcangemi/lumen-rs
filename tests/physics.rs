@@ -8,6 +8,81 @@ use lumen_rs::{
     scene,
 };
 
+fn environment_fixture() -> scene::Scene {
+    let mut scene = scene::preset("studio", 1.5).unwrap();
+    scene.primitives.clear();
+    scene.medium = None;
+    scene.add_sphere(Vec3::X * 100.0, 1.0, 0);
+    scene.camera = lumen_rs::camera::Camera::new(Vec3::ZERO, Vec3::Y, 90.0, 1.5, 0.0, 1.0);
+    scene.textures = lumen_rs::texture::TextureAtlas {
+        descriptors: vec![[0, 4, 2, 0]],
+        pixels: vec![[4.0, 0.0, 0.0, 0.0]; 4]
+            .into_iter()
+            .chain(vec![[0.0, 2.0, 0.0, 0.0]; 4])
+            .collect(),
+    };
+    scene.environment_map = Some(scene::EnvironmentMap {
+        texture: 0,
+        intensity: 0.5,
+        rotation: 0.0,
+        horizon_fade: 0.0,
+    });
+    scene.finish().unwrap();
+    scene
+}
+
+#[test]
+fn hdr_environment_preserves_radiance_and_clamps_poles() {
+    let mut scene = environment_fixture();
+    assert_eq!(scene.environment(Vec3::Y), Vec3::new(2.0, 0.0, 0.0));
+    assert_eq!(scene.environment(-Vec3::Y), Vec3::new(0.0, 1.0, 0.0));
+    let left = scene.environment(Vec3::new(-1.0, 0.3, 1e-6).normalize());
+    let right = scene.environment(Vec3::new(-1.0, 0.3, -1e-6).normalize());
+    assert!((left - right).length() < 1e-5);
+    scene.environment_map.as_mut().unwrap().horizon_fade = 0.25;
+    assert_eq!(scene.environment(-Vec3::Y), scene.horizon);
+    assert_eq!(scene.environment(Vec3::X), scene.horizon);
+
+    // Distinct longitude columns expose a mirrored map or the wrong rotation sign.
+    for (i, texel) in scene.textures.pixels.iter_mut().enumerate() {
+        *texel = [(i % 4) as f32, 0.0, 0.0, 0.0];
+    }
+    scene.environment_map.as_mut().unwrap().horizon_fade = 0.0;
+    assert_eq!(scene.environment(Vec3::X).x, 0.75);
+    assert_eq!(scene.environment(Vec3::Z).x, 1.25);
+    scene.environment_map.as_mut().unwrap().rotation = std::f32::consts::FRAC_PI_2;
+    assert_eq!(scene.environment(Vec3::X).x, 1.25);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "requires a native Metal device"]
+fn metal_hdr_environment_matches_cpu() {
+    let mut scene = environment_fixture();
+    for (i, texel) in scene.textures.pixels.iter_mut().enumerate() {
+        texel[2] = (i % 4) as f32;
+    }
+    let map = scene.environment_map.as_mut().unwrap();
+    map.rotation = 0.37;
+    map.horizon_fade = 0.4;
+    let settings = RenderSettings {
+        width: 24,
+        height: 16,
+        samples: 8,
+        max_depth: 4,
+        ..Default::default()
+    };
+    let cpu = render::cpu(&scene, settings).unwrap();
+    let gpu = lumen_rs::metal_backend::render(&scene, settings).unwrap();
+    for (a, b) in cpu.pixels.iter().zip(&gpu.pixels) {
+        assert!(
+            (*a - *b).abs().max_element() < 0.0001,
+            "HDR environment mismatch: {a:?} {b:?}"
+        );
+    }
+    assert_eq!(gpu.stats.invalid_samples, 0);
+}
+
 #[test]
 fn bvh_matches_brute_force_for_random_and_axis_aligned_rays() {
     let mut rng = Rng::new(1, 2, 3);
@@ -969,6 +1044,7 @@ fn night_interior_uses_bulbs_without_daylight_emitters() {
         "Preserve the full-size bulb envelope"
     );
     let mut street_lamps = 0;
+    let mut exterior_ceiling_lights = 0;
     for light in &scene.lights {
         let primitive = &scene.primitives[light.primitive as usize];
         let (lo, hi) = primitive.bounds();
@@ -978,6 +1054,22 @@ fn night_interior_uses_bulbs_without_daylight_emitters() {
                 .try_into()
                 .unwrap(),
         );
+        if center.x < -15.4 && primitive.info[0] == 1 {
+            exterior_ceiling_lights += 1;
+            assert!(
+                scene
+                    .intersect(
+                        Ray {
+                            origin: center - Vec3::Y * 0.002,
+                            direction: -Vec3::Y,
+                        },
+                        0.3,
+                        false,
+                    )
+                    .is_none(),
+                "Apartment ceiling lights must have clear space beneath them: {center}"
+            );
+        }
         if (-9.0..-7.0).contains(&center.x) && center.y > 4.0 {
             assert!(
                 power.max_element() <= 0.7,
@@ -1021,6 +1113,7 @@ fn night_interior_uses_bulbs_without_daylight_emitters() {
         street_lamps, 7,
         "The street must have working public lighting"
     );
+    assert!(exterior_ceiling_lights > 0);
 }
 
 #[test]

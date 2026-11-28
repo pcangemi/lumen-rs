@@ -29,6 +29,7 @@ pub struct Light {
     pub cdf: f32,
 }
 pub struct Scene {
+    pub environment_map: Option<EnvironmentMap>,
     pub medium: Option<crate::medium::Medium>,
     pub textures: crate::texture::TextureAtlas,
     pub primitives: Vec<Primitive>,
@@ -39,9 +40,19 @@ pub struct Scene {
     pub sky: Vec3,
     pub horizon: Vec3,
 }
+/// Linear equirectangular radiance, shared by camera, reflection and GI rays.
+#[derive(Clone, Copy)]
+pub struct EnvironmentMap {
+    pub texture: usize,
+    pub intensity: f32,
+    pub rotation: f32,
+    /// Blend to the scene horizon below this elevation sine; zero disables fading.
+    pub horizon_fade: f32,
+}
 impl Scene {
     fn empty(camera: Camera) -> Self {
         Self {
+            environment_map: None,
             medium: None,
             textures: crate::texture::TextureAtlas::default(),
             primitives: vec![],
@@ -54,6 +65,16 @@ impl Scene {
         }
     }
     pub fn finish(&mut self) -> Result<()> {
+        if let Some(map) = self.environment_map {
+            ensure!(
+                map.texture < self.textures.descriptors.len()
+                    && map.intensity.is_finite()
+                    && map.intensity >= 0.0
+                    && map.rotation.is_finite()
+                    && (0.0..=1.0).contains(&map.horizon_fade),
+                "Invalid environment map"
+            );
+        }
         ensure!(
             !self.primitives.is_empty(),
             "The scene contains no primitives"
@@ -310,8 +331,35 @@ impl Scene {
         (material, normal)
     }
     pub fn environment(&self, d: Vec3) -> Vec3 {
+        if let Some(map) = self.environment_map {
+            let u =
+                d.z.atan2(d.x) / std::f32::consts::TAU + 0.5 + map.rotation / std::f32::consts::TAU;
+            let v = 1.0 - d.y.clamp(-1.0, 1.0).acos() / std::f32::consts::PI;
+            let half_texel = 0.5 / self.textures.descriptors[map.texture][2] as f32;
+            let radiance = self.textures.sample(
+                map.texture,
+                Vec2::new(u, v.clamp(half_texel, 1.0 - half_texel)),
+            ) * map.intensity;
+            let t = if map.horizon_fade > 0.0 {
+                (d.y / map.horizon_fade).clamp(0.0, 1.0)
+            } else {
+                1.0
+            };
+            return self.horizon.lerp(radiance, t * t * (3.0 - 2.0 * t));
+        }
         self.horizon
             .lerp(self.sky, (d.y * 0.5 + 0.5).clamp(0.0, 1.0))
+    }
+    #[cfg(target_os = "macos")]
+    pub(crate) fn packed_environment(&self) -> [f32; 4] {
+        self.environment_map.map_or([0.0; 4], |map| {
+            [
+                (map.texture + 1) as f32,
+                map.intensity,
+                map.rotation,
+                map.horizon_fade,
+            ]
+        })
     }
     pub fn light_probability(&self, id: usize) -> f32 {
         self.lights[id].cdf

@@ -21,6 +21,15 @@
 !/renders/clouds.json
 !/renders/viewer.png
 !/renders/navigation-preview.png
+!/renders/haussmann-night.png
+!/renders/haussmann-night.json
+!/renders/haussmann-night-view.json
+!/renders/haussmann-day.png
+!/renders/haussmann-day.json
+!/renders/haussmann-day-view.json
+!/renders/haussmann-railing.png
+!/renders/haussmann-railing.json
+!/renders/haussmann-railing-view.json
 !/renders/benchmark.json
 .DS_Store
 
