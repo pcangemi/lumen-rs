@@ -236,12 +236,27 @@ pub fn start(args: &Args) -> Job {
             } else {
                 scene::preset(&args.scene, aspect)?
             });
+            let cpu_device = format!("{} CPU threads", rayon::current_num_threads());
             #[cfg(target_os = "macos")]
-            let device = lumen_rs::metal_backend::available();
+            let (use_metal, device) = {
+                let device = lumen_rs::metal_backend::available();
+                let use_metal = matches!(args.backend, Backend::Metal)
+                    || matches!(args.backend, Backend::Auto) && device.is_some();
+                let name = if use_metal {
+                    device.unwrap_or_else(|| "Metal unavailable".into())
+                } else {
+                    cpu_device
+                };
+                (use_metal, name)
+            };
             #[cfg(not(target_os = "macos"))]
-            let device: Option<String> = None;
-            let use_metal = matches!(args.backend, Backend::Metal)
-                || matches!(args.backend, Backend::Auto) && device.is_some();
+            let (use_metal, device) = {
+                anyhow::ensure!(
+                    !matches!(args.backend, Backend::Metal),
+                    "Metal requires macOS"
+                );
+                (false, cpu_device)
+            };
             emit(
                 &sender,
                 0,
@@ -252,11 +267,7 @@ pub fn start(args: &Args) -> Job {
                         "CPU / Rayon"
                     }
                     .into(),
-                    device: if use_metal {
-                        device.unwrap_or_else(|| "Metal unavailable".into())
-                    } else {
-                        format!("{} CPU threads", rayon::current_num_threads())
-                    },
+                    device,
                     primitives: scene.primitives.len(),
                     nodes: scene.bvh.nodes.len(),
                 },
@@ -267,8 +278,6 @@ pub fn start(args: &Args) -> Job {
             } else {
                 None
             };
-            #[cfg(not(target_os = "macos"))]
-            anyhow::ensure!(!use_metal, "Metal requires macOS");
             let point_cloud = matches!(args.preview_style, PreviewStyle::Points)
                 .then(|| lumen_rs::point_cloud::PointCloud::new(&scene, 1_200_000));
             #[cfg(target_os = "macos")]

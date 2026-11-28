@@ -216,6 +216,8 @@ See [glass](scenes/glass-study.json), [water](scenes/water-study.json), and [fog
 
 ## Validate
 
+GitHub Actions runs formatting, Clippy, the standard test suite, release builds and CPU render/viewer smoke checks on macOS. Ubuntu CI is outside the current Apple Silicon support target. Native Metal runtime validation is performed separately on a machine with an accessible GPU.
+
 ```bash
 cargo fmt --check
 cargo clippy --locked --all-targets -- -D warnings
