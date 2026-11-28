@@ -1,0 +1,255 @@
+{
+  "machine": "arm64",
+  "scene": "interior-neon",
+  "settings": {
+    "width": 1920,
+    "height": 1080,
+    "samples": 16,
+    "bounces": 50,
+    "repeats": 3
+  },
+  "binary_sha256": {
+    "baseline": "6a75062e05aaca76da6053b0c8ec10a1336766cf5b5e41861ac46ece9a2c7466",
+    "candidate": "fc45694c8103c91c64b53b541e52c25fb0670ff67c45b9eb0b309306e00b55b6"
+  },
+  "median_seconds": {
+    "baseline": 31.452875458,
+    "candidate": 32.222479625
+  },
+  "speedup": 0.9761159235429264,
+  "time_reduction_percent": -2.446848358992404,
+  "note": "Measured transport only; scene loading, shader compilation and denoising excluded. No prediction of a completed 2048-spp render. All raw linear pixels match exactly. The candidate was slower at the median and remains disabled by default. Its executable is retained locally in .runtime/performance/visibility-experiment/.",
+  "runs": [
+    {
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "baseline": {
+        "backend": "metal",
+        "device": "Apple M1 Pro",
+        "width": 1920,
+        "height": 1080,
+        "requested_spp": 16,
+        "average_spp": 16.0,
+        "max_depth": 50,
+        "seed": 42,
+        "adaptive_threshold": 0.0,
+        "render_seconds": 31.452875458,
+        "camera_samples_per_second": 1054835.1944579147,
+        "primitives": 4705126,
+        "bvh_nodes": 2873335,
+        "bvh_depth": 31,
+        "texture_count": 44,
+        "scene_data_bytes": 1681795664,
+        "invalid_samples": 0,
+        "denoiser": null,
+        "denoise_seconds": 0.0,
+        "gpu_dispatch": {
+          "command_count": 2160,
+          "gpu_seconds": 30.219433961436152,
+          "max_command_seconds": 0.034048208268359303,
+          "max_samples_per_command": 1,
+          "threads_per_threadgroup": 128,
+          "tile_size": 128
+        }
+      },
+      "candidate": {
+        "backend": "metal",
+        "device": "Apple M1 Pro",
+        "width": 1920,
+        "height": 1080,
+        "requested_spp": 16,
+        "average_spp": 16.0,
+        "max_depth": 50,
+        "seed": 42,
+        "adaptive_threshold": 0.0,
+        "render_seconds": 31.5471745,
+        "camera_samples_per_second": 1051682.1403450887,
+        "primitives": 4705126,
+        "bvh_nodes": 2873335,
+        "bvh_depth": 31,
+        "texture_count": 44,
+        "scene_data_bytes": 1681795664,
+        "invalid_samples": 0,
+        "denoiser": null,
+        "denoise_seconds": 0.0,
+        "gpu_dispatch": {
+          "command_count": 2160,
+          "gpu_seconds": 30.17893454444129,
+          "max_command_seconds": 0.03449224994983524,
+          "max_samples_per_command": 1,
+          "threads_per_threadgroup": 128,
+          "tile_size": 128
+        }
+      },
+      "comparison": {
+        "candidate": "renders/performance/visibility-fullhd/candidate-0.exr",
+        "height": 1080,
+        "linear_rmse": 0.0,
+        "maximum_absolute_error": 0.0,
+        "mean_absolute_error": 0.0,
+        "note": "Use raw linear EXR inputs. Denoised results must be reported separately.",
+        "pixel_absolute_error_p99": 0.0,
+        "reference": "renders/performance/visibility-fullhd/baseline-0.exr",
+        "relative_l2": 0.0,
+        "width": 1920
+      }
+    },
+    {
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "candidate": {
+        "backend": "metal",
+        "device": "Apple M1 Pro",
+        "width": 1920,
+        "height": 1080,
+        "requested_spp": 16,
+        "average_spp": 16.0,
+        "max_depth": 50,
+        "seed": 42,
+        "adaptive_threshold": 0.0,
+        "render_seconds": 32.8706895,
+        "camera_samples_per_second": 1009336.9048434473,
+        "primitives": 4705126,
+        "bvh_nodes": 2873335,
+        "bvh_depth": 31,
+        "texture_count": 44,
+        "scene_data_bytes": 1681795664,
+        "invalid_samples": 0,
+        "denoiser": null,
+        "denoise_seconds": 0.0,
+        "gpu_dispatch": {
+          "command_count": 2160,
+          "gpu_seconds": 31.291036124224775,
+          "max_command_seconds": 0.033921583322808146,
+          "max_samples_per_command": 1,
+          "threads_per_threadgroup": 128,
+          "tile_size": 128
+        }
+      },
+      "baseline": {
+        "backend": "metal",
+        "device": "Apple M1 Pro",
+        "width": 1920,
+        "height": 1080,
+        "requested_spp": 16,
+        "average_spp": 16.0,
+        "max_depth": 50,
+        "seed": 42,
+        "adaptive_threshold": 0.0,
+        "render_seconds": 33.32344825,
+        "camera_samples_per_second": 995623.2545651995,
+        "primitives": 4705126,
+        "bvh_nodes": 2873335,
+        "bvh_depth": 31,
+        "texture_count": 44,
+        "scene_data_bytes": 1681795664,
+        "invalid_samples": 0,
+        "denoiser": null,
+        "denoise_seconds": 0.0,
+        "gpu_dispatch": {
+          "command_count": 2160,
+          "gpu_seconds": 31.705619878368452,
+          "max_command_seconds": 0.03430299996398389,
+          "max_samples_per_command": 1,
+          "threads_per_threadgroup": 128,
+          "tile_size": 128
+        }
+      },
+      "comparison": {
+        "candidate": "renders/performance/visibility-fullhd/candidate-1.exr",
+        "height": 1080,
+        "linear_rmse": 0.0,
+        "maximum_absolute_error": 0.0,
+        "mean_absolute_error": 0.0,
+        "note": "Use raw linear EXR inputs. Denoised results must be reported separately.",
+        "pixel_absolute_error_p99": 0.0,
+        "reference": "renders/performance/visibility-fullhd/baseline-1.exr",
+        "relative_l2": 0.0,
+        "width": 1920
+      }
+    },
+    {
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "baseline": {
+        "backend": "metal",
+        "device": "Apple M1 Pro",
+        "width": 1920,
+        "height": 1080,
+        "requested_spp": 16,
+        "average_spp": 16.0,
+        "max_depth": 50,
+        "seed": 42,
+        "adaptive_threshold": 0.0,
+        "render_seconds": 31.088644958,
+        "camera_samples_per_second": 1067193.5056938676,
+        "primitives": 4705126,
+        "bvh_nodes": 2873335,
+        "bvh_depth": 31,
+        "texture_count": 44,
+        "scene_data_bytes": 1681795664,
+        "invalid_samples": 0,
+        "denoiser": null,
+        "denoise_seconds": 0.0,
+        "gpu_dispatch": {
+          "command_count": 2160,
+          "gpu_seconds": 29.88881716679316,
+          "max_command_seconds": 0.041516708326525986,
+          "max_samples_per_command": 1,
+          "threads_per_threadgroup": 128,
+          "tile_size": 128
+        }
+      },
+      "candidate": {
+        "backend": "metal",
+        "device": "Apple M1 Pro",
+        "width": 1920,
+        "height": 1080,
+        "requested_spp": 16,
+        "average_spp": 16.0,
+        "max_depth": 50,
+        "seed": 42,
+        "adaptive_threshold": 0.0,
+        "render_seconds": 32.222479625,
+        "camera_samples_per_second": 1029641.4300238696,
+        "primitives": 4705126,
+        "bvh_nodes": 2873335,
+        "bvh_depth": 31,
+        "texture_count": 44,
+        "scene_data_bytes": 1681795664,
+        "invalid_samples": 0,
+        "denoiser": null,
+        "denoise_seconds": 0.0,
+        "gpu_dispatch": {
+          "command_count": 2160,
+          "gpu_seconds": 30.494771709898487,
+          "max_command_seconds": 0.033493791590444744,
+          "max_samples_per_command": 1,
+          "threads_per_threadgroup": 128,
+          "tile_size": 128
+        }
+      },
+      "comparison": {
+        "candidate": "renders/performance/visibility-fullhd/candidate-2.exr",
+        "height": 1080,
+        "linear_rmse": 0.0,
+        "maximum_absolute_error": 0.0,
+        "mean_absolute_error": 0.0,
+        "note": "Use raw linear EXR inputs. Denoised results must be reported separately.",
+        "pixel_absolute_error_p99": 0.0,
+        "reference": "renders/performance/visibility-fullhd/baseline-2.exr",
+        "relative_l2": 0.0,
+        "width": 1920
+      }
+    }
+  ],
+  "source_base_commit": "8743910",
+  "candidate_configuration": "visibility_flags enabled; all other production settings unchanged",
+  "production_enabled": false
+}

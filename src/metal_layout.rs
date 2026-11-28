@@ -43,6 +43,61 @@ impl From<&Primitive> for Attributes {
     }
 }
 
+/// Full-precision geometry in three aligned vectors. Only integer metadata is
+/// bit-packed: one kind bit, 31 material bits, and the complete light index.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+pub(crate) struct DenseGeometry {
+    p0: [f32; 4],
+    p1: [f32; 4],
+    p2: [f32; 4],
+}
+impl DenseGeometry {
+    pub(crate) fn supports(p: &Primitive) -> bool {
+        p.info[0] <= 1 && p.info[1] < (1 << 31)
+    }
+}
+impl TryFrom<&Primitive> for DenseGeometry {
+    type Error = anyhow::Error;
+    fn try_from(p: &Primitive) -> Result<Self> {
+        ensure!(
+            Self::supports(p),
+            "Primitive metadata exceeds dense GPU layout"
+        );
+        let mut p1 = p.p1;
+        let mut p2 = p.p2;
+        p1[3] = f32::from_bits((p.info[1] << 1) | p.info[0]);
+        p2[3] = f32::from_bits(p.info[2]);
+        Ok(Self { p0: p.p0, p1, p2 })
+    }
+}
+
+/// Reuse unused normal-vector lanes for UV coordinates; no f32 is quantized.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+pub(crate) struct DenseAttributes {
+    n0: [f32; 4],
+    n1: [f32; 4],
+    n2: [f32; 4],
+    uv: [f32; 4],
+}
+impl From<&Primitive> for DenseAttributes {
+    fn from(p: &Primitive) -> Self {
+        let mut n0 = p.n0;
+        let mut n1 = p.n1;
+        let mut n2 = p.n2;
+        n0[3] = p.uv01[0];
+        n1[3] = p.uv01[1];
+        n2[3] = p.uv01[2];
+        Self {
+            n0,
+            n1,
+            n2,
+            uv: [p.uv01[3], p.uv2[0], p.uv2[1], 0.0],
+        }
+    }
+}
+
 /// Thirty index bits and two tag bits fit in the otherwise unused bound lanes.
 /// Bounds are not quantized; leaf ranges and traversal order stay unchanged.
 #[repr(C)]
@@ -142,6 +197,78 @@ pub(crate) fn wide_nodes(nodes: &[Node]) -> Result<Vec<WideNode>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dense_records_preserve_coordinate_normal_uv_and_identifier_bits() {
+        assert_eq!(std::mem::size_of::<DenseGeometry>(), 48);
+        assert_eq!(std::mem::size_of::<DenseAttributes>(), 64);
+        for (kind, material, light) in [(0, 0, 0), (1, 137, 400_001), (1, 0x7fffffff, u32::MAX)] {
+            let p = Primitive {
+                p0: [f32::from_bits(1), -0.0, -123.25, 0.000123],
+                p1: [-1.25, 2.5, f32::from_bits(0x3f800001), 0.0],
+                p2: [1e-30, -1e20, 777.0, 0.0],
+                n0: [0.1, -0.2, 0.9, 0.0],
+                n1: [-0.3, 0.4, 0.5, 0.0],
+                n2: [0.6, 0.7, -0.8, 0.0],
+                uv01: [-12.5, 34.75, -0.0, 0.000001],
+                uv2: [11.25, -7.0, 0.0, 0.0],
+                info: [kind, material, light, 0],
+            };
+            let geometry = DenseGeometry::try_from(&p).unwrap();
+            assert_eq!(geometry.p0.map(f32::to_bits), p.p0.map(f32::to_bits));
+            assert_eq!(
+                geometry.p1[..3]
+                    .iter()
+                    .map(|v| v.to_bits())
+                    .collect::<Vec<_>>(),
+                p.p1[..3].iter().map(|v| v.to_bits()).collect::<Vec<_>>()
+            );
+            assert_eq!(
+                geometry.p2[..3]
+                    .iter()
+                    .map(|v| v.to_bits())
+                    .collect::<Vec<_>>(),
+                p.p2[..3].iter().map(|v| v.to_bits()).collect::<Vec<_>>()
+            );
+            assert_eq!(geometry.p1[3].to_bits() & 1, kind);
+            assert_eq!(geometry.p1[3].to_bits() >> 1, material);
+            assert_eq!(geometry.p2[3].to_bits(), light);
+            let attributes = DenseAttributes::from(&p);
+            for (packed, original) in [
+                (attributes.n0, p.n0),
+                (attributes.n1, p.n1),
+                (attributes.n2, p.n2),
+            ] {
+                assert_eq!(
+                    packed[..3].iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+                    original[..3]
+                        .iter()
+                        .map(|v| v.to_bits())
+                        .collect::<Vec<_>>()
+                );
+            }
+            assert_eq!(
+                [
+                    attributes.n0[3],
+                    attributes.n1[3],
+                    attributes.n2[3],
+                    attributes.uv[0]
+                ]
+                .map(f32::to_bits),
+                p.uv01.map(f32::to_bits)
+            );
+            assert_eq!(
+                [attributes.uv[1], attributes.uv[2]].map(f32::to_bits),
+                [p.uv2[0], p.uv2[1]].map(f32::to_bits)
+            );
+            let unsupported = Primitive {
+                info: [1, 1 << 31, 0, 0],
+                ..p
+            };
+            assert!(!DenseGeometry::supports(&unsupported));
+            assert!(DenseGeometry::try_from(&unsupported).is_err());
+        }
+    }
+
     #[test]
     fn compact_bvh_retains_bounds_and_indices() {
         let nodes = [

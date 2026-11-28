@@ -80,6 +80,8 @@ Compiler experiments, quality gates and the official Apple references are docume
 
 Each render writes a PNG and a JSON performance report. `--exr` preserves linear RGB in OpenEXR. `--denoise` also saves the unfiltered result as `final-raw.png` and `final-raw.exr`. Compare raw and clean results when checking fine detail or caustics. PNG uses an ACES-style fitted curve followed by sRGB; this is not a full ACES color-management pipeline.
 
+For a brighter daytime apartment photograph, start with `--scene interior --exposure 1.5`. The viewer's `+` and `−` keys adjust exposure in 0.25 EV steps without retracing. Exposure changes the displayed image and PNG, while the linear EXR, light transport and materials remain unchanged. More samples reduce noise; they do not increase exposure. The opposing facade shades this apartment, and HDR environment importance sampling remains future work.
+
 ## Light transport and performance
 
 - Multi-bounce global illumination, soft shadows, area-light sampling and multiple importance sampling.
@@ -95,7 +97,7 @@ Each render writes a PNG and a JSON performance report. `--exr` preserves linear
 - Optional adaptive sampling, disabled by default because statistical stopping can bias estimates and miss rare bright paths.
 - Optional albedo/normal-guided Open Image Denoise filtering on CPU.
 
-Caustic paths are represented by path tracing, but difficult specular-to-diffuse paths can converge slowly. There is **no dedicated caustic solver** yet. Denoising does not establish transport accuracy or remove that sampling limitation. Native Metal acceleration structures, wavefront scheduling and competitive speedups remain work to measure, not implemented performance claims.
+Caustic paths are represented by path tracing, but difficult specular-to-diffuse paths can converge slowly. There is **no dedicated caustic solver** yet. Denoising does not establish transport accuracy or remove that sampling limitation. Native Metal acceleration structures remain experimental and disabled by default; wavefront scheduling is not implemented. Performance claims are limited to the recorded comparisons below.
 
 Metal reports command count, total GPU command time, longest command, maximum batch size, tile size and threads per threadgroup in each JSON report. The 20 ms target is a scheduling heuristic, not a hard latency guarantee: scene complexity, competing applications and system load can change execution time. A one-sample tile can exceed the target. A failed command stops the render with its driver diagnostic and sample range; partially written work is not silently retried.
 
@@ -259,6 +261,8 @@ The paired Metal benchmark alternates execution order, defaults to Full HD with 
 An earlier [M1 Pro validation record](docs/VALIDATION.md#metal-throughput-with-identical-pixels) reports a **2.10× transport speedup** over `9e40a6f` on the complete Full HD night scene at 16 samples and 50 bounces, with exact raw-pixel equality across three paired runs. This is not a measured duration for a complete 2,048-sample render.
 
 The current [lossless Metal traversal pass](docs/metal-performance.md#rebuilt-executable-versus-the-previous-release) enables compact BVH nodes, split geometry and shading data, cached ray bounds and two bounded tile submissions. A direct comparison with the previous build measured **49.87 → 30.97 seconds (1.61× throughput, 37.9% less time)** on the Full HD neon apartment at 16 spp and 50 bounces, with identical linear EXR pixels across three paired runs. Native Metal traversal and a four-way BVH remain explicit experiments.
+
+A [follow-up comparison](docs/metal-performance.md#further-lossless-experiments) tested smaller records, spatial pixel ordering, wider launches and cached visibility flags. All retained the tested raw pixels, but none established an additional production speedup. The validated defaults remain in place. Experimental tuning is available through `benchmark_metal_tuning`; it does not lower final-render quality settings.
 
 Camera samples per second are not rays per second. Every sample can trace several path and shadow rays. No result in this repository establishes that Lumen is faster than a production renderer at equal final-image quality.
 

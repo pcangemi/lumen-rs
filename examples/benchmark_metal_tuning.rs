@@ -1,4 +1,4 @@
-//! Compare compiler variants using identical samples, geometry and raw linear pixels.
+//! Compare Metal configurations using identical samples, geometry and raw linear pixels.
 #[cfg(target_os = "macos")]
 fn main() -> anyhow::Result<()> {
     use anyhow::ensure;
@@ -27,6 +27,9 @@ fn main() -> anyhow::Result<()> {
         /// Comma-separated variant names; omit to evaluate every variant.
         #[arg(long)]
         variants: Option<String>,
+        /// Variant whose raw image defines correctness, independent of timing order.
+        #[arg(long, default_value = "generic")]
+        reference: String,
         #[arg(long, default_value = "renders/metal-tuning.json")]
         output: std::path::PathBuf,
         /// Capture the first measured render. Set MTL_CAPTURE_ENABLED=1 before launch.
@@ -48,9 +51,85 @@ fn main() -> anyhow::Result<()> {
     };
     settings.validate()?;
     let scene = scene::preset(&args.scene, args.width as f32 / args.height as f32)?;
+    // Freeze the 8743910 production settings, even when the current defaults change.
+    let previous = MetalTuning {
+        split_geometry: true,
+        compact_nodes: true,
+        cached_bounds: true,
+        command_window: 2,
+        ..Default::default()
+    };
     let variants = [
         ("generic", MetalTuning::default()),
         ("production", MetalTuning::production()),
+        ("previous", previous),
+        (
+            "visibility",
+            MetalTuning {
+                visibility_flags: true,
+                ..previous
+            },
+        ),
+        (
+            "dense-geometry",
+            MetalTuning {
+                dense_geometry: true,
+                ..previous
+            },
+        ),
+        (
+            "dense-attributes",
+            MetalTuning {
+                dense_attributes: true,
+                ..previous
+            },
+        ),
+        (
+            "dense",
+            MetalTuning {
+                dense_geometry: true,
+                dense_attributes: true,
+                ..previous
+            },
+        ),
+        (
+            "morton",
+            MetalTuning {
+                morton_order: true,
+                ..previous
+            },
+        ),
+        (
+            "group-64",
+            MetalTuning {
+                simd_groups: 2,
+                ..previous
+            },
+        ),
+        (
+            "group-256",
+            MetalTuning {
+                simd_groups: 8,
+                ..previous
+            },
+        ),
+        (
+            "dense-morton",
+            MetalTuning {
+                dense_geometry: true,
+                dense_attributes: true,
+                morton_order: true,
+                ..previous
+            },
+        ),
+        (
+            "wide-compact",
+            MetalTuning {
+                wide_bvh: true,
+                compact_stack: true,
+                ..previous
+            },
+        ),
         (
             "wide-queued",
             MetalTuning {
@@ -159,7 +238,11 @@ fn main() -> anyhow::Result<()> {
             },
         ),
     ];
-    let selected: Vec<usize> = variants
+    let reference_index = variants
+        .iter()
+        .position(|(name, _)| *name == args.reference)
+        .ok_or_else(|| anyhow::anyhow!("Unknown reference variant"))?;
+    let mut selected: Vec<usize> = variants
         .iter()
         .enumerate()
         .filter(|(_, (name, _))| {
@@ -170,9 +253,11 @@ fn main() -> anyhow::Result<()> {
         .map(|(index, _)| index)
         .collect();
     ensure!(
-        !selected.is_empty() && selected.contains(&0),
-        "Selected variants must include generic as the reference"
+        selected.contains(&reference_index),
+        "Selected variants must include the reference"
     );
+    // Establish the reference image before experimenting with scheduling order.
+    selected.sort_by_key(|&index| (index != reference_index, index));
     let control = RenderControl::default();
     let mut reference = None;
     let mut records = Vec::new();
@@ -246,7 +331,7 @@ fn main() -> anyhow::Result<()> {
             std::fs::write(
                 &args.output,
                 serde_json::to_vec_pretty(
-                    &serde_json::json!({"scene": args.scene, "width": args.width, "height": args.height,
+                    &serde_json::json!({"scene": args.scene, "reference_variant": args.reference, "width": args.width, "height": args.height,
                 "samples": args.samples, "bounces": args.bounces, "primitives": scene.primitives.len(), "bvh_depth": scene.bvh.depth, "device": lumen_rs::metal_backend::available(), "runs": records}),
                 )?,
             )?;

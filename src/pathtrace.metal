@@ -37,15 +37,56 @@ struct Primitive {
 #if !LUMEN_SPLIT_GEOMETRY
     float4 p0, p1, p2;
 #endif
-    float4 n0, n1, n2, uv01, uv2;
+    float4 n0, n1, n2;
+#if LUMEN_DENSE_ATTRIBUTES
+    float4 uv;
+#else
+    float4 uv01, uv2;
+#endif
 #if !LUMEN_SPLIT_GEOMETRY
     uint4 info;
 #endif
 };
-struct IntersectionPrimitive {
+// Geometry is the logical record; IntersectionPrimitive is its storage layout.
+struct Geometry {
     float4 p0, p1, p2;
     uint4 info;
 };
+struct IntersectionPrimitive {
+    float4 p0, p1, p2;
+#if !LUMEN_DENSE_GEOMETRY
+    uint4 info;
+#endif
+};
+Geometry unpack_geometry(device const IntersectionPrimitive &g) {
+#if LUMEN_DENSE_GEOMETRY
+    uint encoded = as_type<uint>(g.p1.w);
+    return {g.p0, g.p1, g.p2, uint4(encoded & 1, encoded >> 1, as_type<uint>(g.p2.w), 0)};
+#else
+    return {g.p0, g.p1, g.p2, g.info};
+#endif
+}
+float2 vertex_uv0(device const Primitive &p) {
+#if LUMEN_DENSE_ATTRIBUTES
+    return float2(p.n0.w, p.n1.w);
+#else
+    return p.uv01.xy;
+#endif
+}
+float2 vertex_uv1(device const Primitive &p) {
+#if LUMEN_DENSE_ATTRIBUTES
+    return float2(p.n2.w, p.uv.x);
+#else
+    return p.uv01.zw;
+#endif
+}
+float2 vertex_uv2(device const Primitive &p) {
+#if LUMEN_DENSE_ATTRIBUTES
+    return p.uv.yz;
+#else
+    return p.uv2.xy;
+#endif
+}
 #if LUMEN_WIDE_BVH
 struct Node {
     float4 lower_x, lower_y, lower_z, upper_x, upper_y, upper_z;
@@ -68,12 +109,12 @@ uint4 node_data(device const Node &node) {
 #endif
 }
 #endif
-IntersectionPrimitive geometry_at(device const Primitive *p,
+Geometry geometry_at(device const Primitive *p,
                                   device const IntersectionPrimitive *geometry, uint i) {
 #if LUMEN_SPLIT_GEOMETRY
-    return geometry[i];
+    return unpack_geometry(geometry[i]);
 #else
-    if (compact_geometry) return geometry[i];
+    if (compact_geometry) return unpack_geometry(geometry[i]);
     return {p[i].p0, p[i].p1, p[i].p2, p[i].info};
 #endif
 }
@@ -188,7 +229,12 @@ template<typename PrimitiveData>
 bool primitive_intersection(device const PrimitiveData &p, Ray ray, float limit,
                             thread SurfaceIntersection &intersection) {
     float t;
-    if (p.info.x == 0) {
+#if LUMEN_DENSE_GEOMETRY
+    uint kind = as_type<uint>(p.p1.w) & 1;
+#else
+    uint kind = p.info.x;
+#endif
+    if (kind == 0) {
         float3 oc = ray.o - p.p0.xyz;
         float b = dot(oc, ray.d);
         float3 perpendicular = oc - ray.d * b;
@@ -226,7 +272,7 @@ bool primitive_intersection(device const PrimitiveData &p, Ray ray, float limit,
     intersection.t = t;
     return true;
 }
-Hit surface_hit(device const Primitive &p, IntersectionPrimitive g, Ray ray, uint index,
+Hit surface_hit(device const Primitive &p, Geometry g, Ray ray, uint index,
                 SurfaceIntersection intersection) {
     Hit hit;
     float t = intersection.t;
@@ -238,7 +284,7 @@ Hit surface_hit(device const Primitive &p, IntersectionPrimitive g, Ray ray, uin
         hit.uv = float2(.5f + atan2(outward.z, outward.x) / (2 * PI), .5f - asin(outward.y) / PI);
     } else {
         float u = intersection.barycentric.x, w = intersection.barycentric.y;
-        hit.uv = p.uv01.xy * (1 - u - w) + p.uv01.zw * u + p.uv2.xy * w;
+        hit.uv = vertex_uv0(p) * (1 - u - w) + vertex_uv1(p) * u + vertex_uv2(p) * w;
         outward = normalize(cross(g.p1.xyz, g.p2.xyz));
         shading = p.n0.xyz * (1 - u - w) + p.n1.xyz * u + p.n2.xyz * w;
         shading = dot(shading, shading) > 1e-12f ? normalize(shading) : outward;
@@ -285,9 +331,9 @@ NativeIntersection native_intersection(float3 origin [[origin]], float3 directio
     Ray ray = {origin, direction};
     SurfaceIntersection intersection;
     if (!primitive_intersection(payload.geometry[index], ray, limit, intersection)) return {false, 0};
-    Material material = payload.materials[payload.geometry[index].info.y];
+    Material material = payload.materials[unpack_geometry(payload.geometry[index]).info.y];
     if (has_opacity && material.maps.w > 0) {
-        Hit hit = surface_hit(payload.attributes[index], payload.geometry[index], ray, index, intersection);
+        Hit hit = surface_hit(payload.attributes[index], unpack_geometry(payload.geometry[index]), ray, index, intersection);
         if (texture_sample(payload.texels, payload.textures, material.maps.w - 1, surface_uv(material, hit)).x < .5f)
             return {false, 0};
     }
@@ -306,7 +352,7 @@ bool intersect_native(NativeContext native, device const Primitive *p,
     // Reconstruct using the original limit, so strict closest-hit comparisons
     // do not reject the distance already accepted by the intersection function.
     if (!primitive_intersection(geometry[result.primitive_id], ray, limit, intersection)) return false;
-    hit = surface_hit(p[result.primitive_id], geometry[result.primitive_id], ray, result.primitive_id, intersection);
+    hit = surface_hit(p[result.primitive_id], unpack_geometry(geometry[result.primitive_id]), ray, result.primitive_id, intersection);
     return true;
 }
 #endif
@@ -384,6 +430,15 @@ bool intersect_impl(device const Primitive *p, device const IntersectionPrimitiv
                     : primitive_intersection(p[i], ray, limit, intersection);
 #endif
                 if (found_intersection) {
+#if LUMEN_VISIBILITY_FLAGS
+                    // Immutable classification removes material-buffer reads for
+                    // ordinary blockers. Cutouts and thin sheets retain full evaluation.
+                    uint flags = geometry[i].info.w;
+                    bool needs_material = (has_opacity && (flags & 1) != 0) ||
+                                          (transmit_sheets && (flags & 2) != 0);
+                    if (any_hit && !needs_material) return true;
+                    if (needs_material) {
+#endif
                     uint material_index = geometry_at(p, geometry, i).info.y;
                     Material material = materials[material_index];
                     if (any_hit && (!has_opacity || material.maps.w == 0) &&
@@ -400,6 +455,9 @@ bool intersect_impl(device const Primitive *p, device const IntersectionPrimitiv
                             continue;
                         }
                     }
+#if LUMEN_VISIBILITY_FLAGS
+                    }
+#endif
                     if (any_hit)
                         return true;
                     found = true;
@@ -572,7 +630,7 @@ void surface_shading(thread Material &material, thread Hit &hit, float3 outgoing
         return;
     float3 mapped = texture_sample(texels, textures, material.maps.x - 1, uv) * 2 - 1;
     device const Primitive &p = primitives[hit.primitive];
-    IntersectionPrimitive g = geometry_at(primitives, geometry, hit.primitive);
+    Geometry g = geometry_at(primitives, geometry, hit.primitive);
     float3 t, b;
     if (material.detail.w < 0) {
         float3 n = abs(hit.n);
@@ -587,7 +645,7 @@ void surface_shading(thread Material &material, thread Hit &hit, float3 outgoing
             b = float3(0, 1, 0);
         }
     } else if (g.info.x == 1) {
-        float2 du = p.uv01.zw - p.uv01.xy, dv = p.uv2.xy - p.uv01.xy;
+        float2 du = vertex_uv1(p) - vertex_uv0(p), dv = vertex_uv2(p) - vertex_uv0(p);
         float determinant = du.x * dv.y - du.y * dv.x;
         if (abs(determinant) <= 1e-10f)
             return;
@@ -759,7 +817,7 @@ float3 volume_light(device const Primitive *primitives, device const Intersectio
     }
     uint index = min(lo, params.config.z - 1);
     device const Light &light = lights[index];
-    IntersectionPrimitive primitive = geometry_at(primitives, geometry, light.primitive);
+    Geometry primitive = geometry_at(primitives, geometry, light.primitive);
     float3 light_position, normal;
     if (primitive.info.x == 0) {
         normal = sphere_sample(rng);
@@ -893,7 +951,7 @@ float3 trace(device const Primitive *primitives, device const IntersectionPrimit
                 }
                 uint li = min(lo, params.config.z - 1);
                 device const Light &light = lights[li];
-                IntersectionPrimitive p = geometry_at(primitives, geometry, light.primitive);
+                Geometry p = geometry_at(primitives, geometry, light.primitive);
                 float3 lp, ln;
                 if (p.info.x == 0) {
                     ln = sphere_sample(rng);
@@ -948,6 +1006,21 @@ float3 trace(device const Primitive *primitives, device const IntersectionPrimit
     }
     return radiance;
 }
+uint compact_even_bits(uint value) {
+    value &= 0x5555u;
+    value = (value | (value >> 1)) & 0x3333u;
+    value = (value | (value >> 2)) & 0x0f0fu;
+    return (value | (value >> 4)) & 0x00ffu;
+}
+uint2 tile_coordinates(uint local_id, uint4 tile) {
+#if LUMEN_MORTON_ORDER
+    if (tile.z == 128 && tile.w == 128)
+        return tile.xy + uint2(compact_even_bits(local_id), compact_even_bits(local_id >> 1));
+#endif
+    // Partial edge tiles retain their dense row-major coverage.
+    return tile.xy + uint2(local_id % tile.z, local_id / tile.z);
+}
+
 kernel void
 pathtrace(device const Primitive *primitives [[buffer(0)]], device const Node *nodes [[buffer(1)]],
           device const Material *materials [[buffer(2)]], device const Light *lights [[buffer(3)]],
@@ -959,8 +1032,8 @@ pathtrace(device const Primitive *primitives [[buffer(0)]], device const Node *n
     NATIVE_CONTEXT
     if (local_id >= params.tile.z * params.tile.w)
         return;
-    uint id = (params.tile.y + local_id / params.tile.z) * params.image.x + params.tile.x +
-              local_id % params.tile.z;
+    uint2 pixel = tile_coordinates(local_id, params.tile);
+    uint id = pixel.y * params.image.x + pixel.x;
     if (id >= params.image.x * params.image.y)
         return;
     float4 sum = film[id], moment = moments[id];
@@ -1010,8 +1083,8 @@ kernel void navigation_preview(
     NATIVE_BINDINGS uint local_id [[thread_position_in_grid]]) {
     NATIVE_CONTEXT
     if (local_id >= params.tile.z * params.tile.w) return;
-    uint x = params.tile.x + local_id % params.tile.z;
-    uint y = params.tile.y + local_id / params.tile.z;
+    uint2 pixel = tile_coordinates(local_id, params.tile);
+    uint x = pixel.x, y = pixel.y;
     Camera c = params.camera;
     float sx = 2 * (float(x) + .5f) / float(params.image.x) - 1;
     float sy = 1 - 2 * (float(y) + .5f) / float(params.image.y);

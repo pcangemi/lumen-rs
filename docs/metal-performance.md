@@ -133,3 +133,46 @@ The final application was compared directly against the saved `ce68a04` executab
 | Median | **49.872 s** | **30.972 s** | **0** |
 
 This establishes **1.61× tracing throughput / 37.9% less tracing time** on the M1 Pro for the Full HD, 16-spp, 50-bounce neon apartment. Every requested sample completed, with zero invalid samples. Scene loading, compilation, denoising and file output are outside the transport timer. No completed 2,048-spp duration or speed ratio against Cycles is inferred. [Complete paired reports, image errors and binary hashes](results/m1-pro-metal-lossless-fullhd.json).
+
+## Further lossless experiments
+
+The next pass freezes `8743910` as the `previous` benchmark configuration and preserves its executable for application-level comparisons. Merely increasing GPU launch width did not establish a further gain. The benchmark now accepts `--reference previous` so that changes to production defaults cannot silently redefine its reference image.
+
+Two smaller records were evaluated. Geometry can occupy 48 bytes by encoding the primitive kind, material index and light index in unused vector lanes. All positions, edges and sphere radii retain their original FP32 bits. Normals and all six UV coordinates can separately occupy 64 bytes, again retaining every used FP32 bit. The geometry layout validates its metadata range and the ordinary renderer can fall back to the full record if needed. These are storage changes, not mesh simplification or reduced texture precision.
+
+The following Full HD comparison used the complete 4,705,126-primitive neon apartment, 16 samples, 50 bounces and three repetitions with reversed order. All twelve raw images matched exactly. No other render or build ran during these measurements. The first reference run took 44.705 seconds, while the subsequent reference runs took 32.786 and 32.090; all runs are retained in the report rather than selecting the slow first run as a baseline. [Raw measurements](results/m1-pro-metal-records-fullhd.json).
+
+| Configuration | Median tracing time | Scene buffer bytes |
+| --- | ---: | ---: |
+| Previous production settings | 32.786 s | 1,635,822,304 |
+| 48-byte geometry records | 33.702 s | 1,560,540,288 |
+| 48-byte geometry and 64-byte shading records | 34.711 s | 1,485,258,272 |
+| 256 threads per group instead of 128 | 34.680 s | 1,635,822,304 |
+
+Packing both records saves 150,564,032 bytes of GPU scene buffers, but it did not improve the median tracing time here. Neither packed records nor 256-thread launches are enabled by default. Spatial Morton ordering and a smaller four-way traversal stack also remain explicit experiments after inconclusive screening. A parent-pointer traversal prototype preserved the pixels but regressed in every screening repetition; its implementation was discarded. [Screening records](results/m1-pro-metal-followup-screening.json).
+
+Runtime threadgroup width is distinct from the compiler's maximum-threadgroup setting. Launches remain multiples of the pipeline's execution width and are capped by its supported maximum. Apple's guidance motivates measuring these configurations rather than assuming a larger launch must be faster. [Threadgroup and grid sizes](https://developer.apple.com/documentation/metal/calculating-threadgroup-and-grid-sizes).
+
+One further experiment caches immutable cutout and thin-glass classification in unused primitive metadata. Ordinary visibility checks can then avoid reading a material record. Cutouts still sample their opacity map; thin sheets still evaluate Fresnel transmission; final surface shading and solid dielectric transport are unchanged. It adds no scene buffer storage and is evaluated against the saved executable separately from the smaller-record experiments.
+
+### Direct executable check for visibility classification
+
+The saved `8743910` executable and an executable with visibility classification enabled were measured in three alternating Full HD pairs at 16 samples and 50 bounces. No other render or build ran during this comparison. All requested samples completed, with zero invalid samples and zero maximum EXR error, RMSE and relative L2 error. [Reports and executable hashes](results/m1-pro-metal-visibility-fullhd.json).
+
+| Pair | Previous executable | Visibility classification | Maximum linear pixel error |
+| --- | ---: | ---: | ---: |
+| 1 | 31.453 s | 31.547 s | 0 |
+| 2 | 33.323 s | 32.871 s | 0 |
+| 3 | 31.089 s | 32.222 s | 0 |
+| Median | **31.453 s** | **32.222 s** | **0** |
+
+The candidate took 2.45% longer at the median and remains disabled. Its small screening advantage did not carry over to the application comparison. **This follow-up pass establishes no additional production speedup.** The previous validated production configuration is retained; smaller records, Morton ordering, visibility flags and alternative launch widths are explicit experiments only.
+
+```bash
+cargo run --release --example benchmark_metal_tuning -- \
+  --scene interior-neon --width 1920 --height 1080 --samples 16 --bounces 50 \
+  --repeats 3 --reference previous \
+  --variants previous,visibility,dense-geometry,dense,group-256
+```
+
+The new layout tests check coordinate, normal, UV and identifier bits, including signed zero and boundary identifiers. GPU tests check exact final and preview pixels on odd image dimensions, alternate launch widths, tiled/offline agreement, and visibility classification across all six presets. Fewer scene-buffer bytes are useful information, but are not evidence of faster rendering or lower total process memory by themselves.

@@ -79,12 +79,12 @@ One optional bounded medium occupies air outside closed dielectrics. Homogeneous
 
 The viewer runs OIDN on a separate worker with a bounded request queue. Albedo and normal guides are sampled with the rendering camera. Filtering operates on a separate image after complete passes, and completion waits for the final filtered image. Offline rendering filters after transport. Neither mode feeds filtered pixels back into accumulation. The raw image remains available for checking detail, noise and bias.
 
-Image textures include base color, tangent-space normals, roughness, metalness and binary opacity. Rough transmission, spectral dispersion, motion blur, subsurface transport, native Metal acceleration structures and a dedicated caustic estimator remain unimplemented.
+Image textures include base color, tangent-space normals, roughness, metalness and binary opacity. Rough transmission, spectral dispersion, motion blur, subsurface transport and a dedicated caustic estimator remain unimplemented. Native Metal acceleration structures are an explicit experiment, disabled in production because they failed the apartment's exact-pixel gate.
 
 ## Validation status
 
 The standard suite checks BVH traversal against brute force, parallel slab boundaries, surface interpolation, dielectric Fresnel and total internal reflection, approximate BRDF energy and reciprocity, constant-radiance transmission through clear glass, outward box winding, OBJ rendering, thread determinism, GPU record sizes, progressive/offline equivalence, cancellation, texture filtering, MTL-relative texture paths, water boundary orientation, Beer–Lambert slab transmission, phase-function sampling and volume transmittance.
 
-Native-window input requires a desktop session, and Metal execution requires an accessible GPU. The headless UI preview and shader compilation do not establish those runtime properties. The optional OIDN test checks noise reduction against a known constant field. The three ignored GPU tests cover all six presets, batch invariance, partial tiles and adaptive stopping on an accessible device.
+Native-window input requires a desktop session, and Metal execution requires an accessible GPU. The headless UI preview and shader compilation do not establish those runtime properties. The optional OIDN test checks noise reduction against a known constant field. The ignored GPU tests cover all six presets, batch invariance, partial tiles, adaptive stopping, camera resets, cancellation and lossless layout variants on an accessible device.
 
 A dependency of the Metal binding (`block` 0.1.6) emits an upstream future-compatibility warning on the current Rust toolchain; project code passes Clippy without warnings.

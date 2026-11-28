@@ -109,6 +109,16 @@ pub struct MetalTuning {
     pub compact_stack: bool,
     pub compact_geometry: bool,
     pub split_geometry: bool,
+    /// Cache cutout/thin-glass classification in otherwise unused primitive metadata.
+    pub visibility_flags: bool,
+    /// Store geometry and integer metadata in 48 bytes, retaining every coordinate bit.
+    pub dense_geometry: bool,
+    /// Store normals and UVs in 64 bytes by using otherwise unused vector lanes.
+    pub dense_attributes: bool,
+    /// Experimental spatial ordering within complete tiles; pixel seeds are unchanged.
+    pub morton_order: bool,
+    /// Runtime launch width in SIMD groups; zero retains four groups.
+    pub simd_groups: u64,
     pub compact_nodes: bool,
     pub cached_bounds: bool,
     /// Experimental: does not pass the apartment exact-pixel gate.
@@ -138,6 +148,7 @@ impl MetalTuning {
 pub struct MetalRenderer<'a> {
     scene: &'a Scene,
     command_window: usize,
+    simd_groups: u64,
     device: Device,
     pipeline: ComputePipelineState,
     preview_pipeline: ComputePipelineState,
@@ -207,10 +218,26 @@ impl<'a> MetalRenderer<'a> {
     }
 
     pub fn new(scene: &'a Scene) -> Result<Self> {
-        Self::with_tuning(scene, MetalTuning::production())
+        let mut tuning = MetalTuning::production();
+        if tuning.dense_geometry && !scene.primitives.iter().all(layout::DenseGeometry::supports) {
+            tuning.dense_geometry = false;
+        }
+        Self::with_tuning(scene, tuning)
     }
 
     pub fn with_tuning(scene: &'a Scene, tuning: MetalTuning) -> Result<Self> {
+        ensure!(
+            !tuning.visibility_flags || (tuning.split_geometry && !tuning.dense_geometry),
+            "Visibility flags require the full split geometry record"
+        );
+        ensure!(
+            matches!(tuning.simd_groups, 0 | 1 | 2 | 4 | 8),
+            "Unsupported SIMD group count"
+        );
+        ensure!(
+            !(tuning.dense_geometry || tuning.dense_attributes) || tuning.split_geometry,
+            "Dense records require split geometry"
+        );
         ensure!(
             tuning.command_window <= 2,
             "At most two commands may be outstanding"
@@ -232,7 +259,11 @@ impl<'a> MetalRenderer<'a> {
             // plus the current node. A four-way node adds at most three pending
             // siblings per two binary levels: depth 60 fits in 128 entries.
             let stack_size = if tuning.wide_bvh {
-                128
+                if tuning.compact_stack {
+                    (3 * scene.bvh.depth.div_ceil(2) + 1).next_power_of_two()
+                } else {
+                    128
+                }
             } else if tuning.compact_stack {
                 (scene.bvh.depth + 1).next_power_of_two()
             } else {
@@ -243,7 +274,11 @@ impl<'a> MetalRenderer<'a> {
                 "BVH exceeds the supported traversal depth"
             );
             let source = format!(
-                "#define LUMEN_BVH_STACK_SIZE {stack_size}\n#define LUMEN_WIDE_BVH {}\n#define LUMEN_NATIVE_TRAVERSAL {}\n#define LUMEN_SPLIT_GEOMETRY {}\n#define LUMEN_COMPACT_NODES {}\n#define LUMEN_CACHED_BOUNDS {}\n{}",
+                "#define LUMEN_VISIBILITY_FLAGS {}\n#define LUMEN_DENSE_GEOMETRY {}\n#define LUMEN_DENSE_ATTRIBUTES {}\n#define LUMEN_MORTON_ORDER {}\n#define LUMEN_BVH_STACK_SIZE {stack_size}\n#define LUMEN_WIDE_BVH {}\n#define LUMEN_NATIVE_TRAVERSAL {}\n#define LUMEN_SPLIT_GEOMETRY {}\n#define LUMEN_COMPACT_NODES {}\n#define LUMEN_CACHED_BOUNDS {}\n{}",
+                u8::from(tuning.visibility_flags),
+                u8::from(tuning.dense_geometry),
+                u8::from(tuning.dense_attributes),
+                u8::from(tuning.morton_order),
                 u8::from(tuning.wide_bvh),
                 u8::from(tuning.native_traversal),
                 u8::from(tuning.split_geometry),
@@ -333,13 +368,27 @@ impl<'a> MetalRenderer<'a> {
                 .transpose()?;
             Ok(Self {
                 command_window: tuning.command_window.max(1),
+                simd_groups: if tuning.simd_groups == 0 {
+                    4
+                } else {
+                    tuning.simd_groups
+                },
                 pipeline,
                 preview_pipeline,
                 queue,
                 acceleration,
                 intersections,
                 preview_intersections,
-                primitives: if tuning.split_geometry {
+                primitives: if tuning.dense_attributes {
+                    buffer(
+                        &device,
+                        &scene
+                            .primitives
+                            .iter()
+                            .map(layout::DenseAttributes::from)
+                            .collect::<Vec<_>>(),
+                    )
+                } else if tuning.split_geometry {
                     buffer(
                         &device,
                         &scene
@@ -351,15 +400,27 @@ impl<'a> MetalRenderer<'a> {
                 } else {
                     buffer(&device, &scene.primitives)
                 },
-                geometry: if tuning.compact_geometry || tuning.split_geometry {
+                geometry: if tuning.dense_geometry {
+                    buffer(
+                        &device,
+                        &scene
+                            .primitives
+                            .iter()
+                            .map(layout::DenseGeometry::try_from)
+                            .collect::<Result<Vec<_>>>()?,
+                    )
+                } else if tuning.compact_geometry || tuning.split_geometry {
                     let values: Vec<_> = scene
                         .primitives
                         .iter()
-                        .map(|p| IntersectionPrimitive {
-                            p0: p.p0,
-                            p1: p.p1,
-                            p2: p.p2,
-                            info: p.info,
+                        .map(|p| {
+                            let mut geometry = IntersectionPrimitive::from(p);
+                            if tuning.visibility_flags {
+                                let material = &scene.materials[p.info[1] as usize];
+                                geometry.info[3] = u32::from(material.maps[3] > 0)
+                                    | (u32::from(material.is_thin_glass()) << 1);
+                            }
+                            geometry
                         })
                         .collect();
                     buffer(&device, &values)
@@ -435,7 +496,7 @@ impl<'a> MetalRenderer<'a> {
             ..
         } = &*self;
         objc::rc::autoreleasepool(|| {
-            let threads = pipeline.thread_execution_width() * 4;
+            let threads = pipeline.thread_execution_width() * self.simd_groups;
             let threads = threads.min(pipeline.max_total_threads_per_threadgroup());
             let start = Instant::now();
             let mut completed_work = 0u64;
@@ -627,7 +688,7 @@ impl<'a> MetalRenderer<'a> {
             );
             self.preview_pixel_count = count;
         }
-        let threads = (self.preview_pipeline.thread_execution_width() * 4)
+        let threads = (self.preview_pipeline.thread_execution_width() * self.simd_groups)
             .min(self.preview_pipeline.max_total_threads_per_threadgroup());
         for tile in tiles_with_size(width, height, 128) {
             if !control.wait_until_ready() {
