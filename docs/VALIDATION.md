@@ -202,3 +202,9 @@ The release validation passed 53 library, viewer and physics tests, including th
 [Navigation measurements](results/m1-pro-point-navigation.json) include 600 native-window frames with walking, looking, GPU readback and interface drawing. The median work time was 5.46 ms; seven frames exceeded 16.67 ms. The software pacing median was 16.664 ms. This is not a guarantee of locked 60 FPS, and it does not describe final-render speed.
 
 The [Metal performance report](metal-performance.md) records the official Apple references, measured compiler regressions and an experimental compact-geometry layout. Those compiler/geometry variants are not enabled by default. Final resolution, physical materials, geometry, sampling and bounce settings remain unchanged.
+
+### Native navigation input regression
+
+The initial navigation benchmark drove the camera directly and did not test window focus or keyboard input. Native testing subsequently reproduced an inverted macOS focus result in minifb 0.28: its `is_active()` returned false for a focused window. The viewer now checks AppKit's [key window](https://developer.apple.com/documentation/appkit/nswindow/iskeywindow) and [active application](https://developer.apple.com/documentation/appkit/nsapplication/isactive) directly on the UI thread.
+
+`cargo run --example check_viewer_input` opens a temporary macOS window and dispatches local AppKit key events. It verifies WASD and arrow movement without a mouse button, F and Tab handling, the native right-mouse handlers, and rejection of movement after losing focus. It does not send global input or require accessibility permissions. Unit tests also cover AZERTY aliases and Cmd/Ctrl+S without camera movement. F enters the navigation preview; S and D are exclusively movement keys, with image saving on Cmd/Ctrl+S and Raw/Clean on Tab.

@@ -85,6 +85,8 @@ impl Args {
         }
     }
 }
+#[path = "viewer/input.rs"]
+mod input;
 #[path = "viewer/worker.rs"]
 mod worker;
 use worker::{Event, start};
@@ -375,11 +377,12 @@ fn main() -> Result<()> {
         let now = Instant::now();
         let dt = now.duration_since(last_tick).as_secs_f32().min(0.05);
         last_tick = now;
-        let looking = window.is_active() && window.get_mouse_down(MouseButton::Right);
+        let input = input::Input::read(&mut window);
+        let looking = input.looking;
         let mouse = window.get_mouse_pos(MouseMode::Discard);
         let mut moved = false;
         if let (Some(nav), Some(scene)) = (&mut navigator, &navigation_scene) {
-            if window.is_active() {
+            if input.active {
                 if looking && let (Some((x, y)), Some((px, py))) = (mouse, last_mouse) {
                     let delta = glam::Vec2::new(x - px, py - y) * 0.003;
                     if delta.length_squared() > 1e-8 {
@@ -387,25 +390,11 @@ fn main() -> Result<()> {
                         moved = true;
                     }
                 }
-                let down = |key| window.is_key_down(key);
-                let horizontal = (down(Key::Right) || looking && down(Key::D)) as i32
-                    - (down(Key::Left) || looking && (down(Key::A) || down(Key::Q))) as i32;
-                let forward = (down(Key::Up) || looking && (down(Key::W) || down(Key::Z))) as i32
-                    - (down(Key::Down) || looking && down(Key::S)) as i32;
-                let vertical = down(Key::PageUp) as i32 - down(Key::PageDown) as i32;
-                let speed = if down(Key::LeftShift) || down(Key::RightShift) {
-                    3.0
-                } else {
-                    1.2
-                };
-                moved |= nav.translate(
-                    glam::Vec3::new(horizontal as f32, vertical as f32, forward as f32),
-                    dt * speed,
-                    scene,
-                );
-                if window.is_key_pressed(Key::F, KeyRepeat::No) {
+                if input.toggle_flight {
                     nav.toggle_flight();
+                    moved = true;
                 }
+                moved |= nav.translate(input.movement, dt * input.speed, scene);
                 if window.is_key_pressed(Key::Home, KeyRepeat::No) {
                     nav.reset();
                     moved = true;
@@ -491,7 +480,8 @@ fn main() -> Result<()> {
         let (pixels, buttons) = viewer_ui::draw_cached(&state, width, height, &mut frame_cache);
         let mut action = None;
         let mouse_down = window.get_mouse_down(MouseButton::Left);
-        if mouse_down
+        if input.active
+            && mouse_down
             && !mouse_was_down
             && let Some((x, y)) = window.get_mouse_pos(MouseMode::Discard)
         {
@@ -501,25 +491,25 @@ fn main() -> Result<()> {
                 .map(|button| button.action);
         }
         mouse_was_down = mouse_down;
-        if window.is_key_pressed(Key::Space, KeyRepeat::No) {
+        if input.active && window.is_key_pressed(Key::Space, KeyRepeat::No) {
             action = Some(Action::TogglePause);
         }
-        if !looking && window.is_key_pressed(Key::D, KeyRepeat::No) {
+        if input.toggle_denoise {
             action = Some(Action::ToggleDenoise);
         }
-        if window.is_key_pressed(Key::R, KeyRepeat::No) {
+        if input.active && window.is_key_pressed(Key::R, KeyRepeat::No) {
             action = Some(Action::Restart);
         }
-        if !looking && window.is_key_pressed(Key::S, KeyRepeat::No) {
+        if input.save_image {
             action = Some(Action::Save);
         }
-        if window.is_key_pressed(Key::Equal, KeyRepeat::Yes) {
+        if input.active && window.is_key_pressed(Key::Equal, KeyRepeat::Yes) {
             state.exposure = (state.exposure + 0.25).min(30.0);
         }
-        if window.is_key_pressed(Key::Minus, KeyRepeat::Yes) {
+        if input.active && window.is_key_pressed(Key::Minus, KeyRepeat::Yes) {
             state.exposure = (state.exposure - 0.25).max(-30.0);
         }
-        if window.is_key_pressed(Key::Escape, KeyRepeat::No) && !state.finished {
+        if input.active && window.is_key_pressed(Key::Escape, KeyRepeat::No) && !state.finished {
             job.control.cancelled.store(true, Ordering::Relaxed);
             state.status = "STOPPED".into();
             state.finished = true;

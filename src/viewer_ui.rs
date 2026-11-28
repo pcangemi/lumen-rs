@@ -249,12 +249,12 @@ pub fn draw_cached(
         if state.flying {
             "FLIGHT [F] / PGUP-PGDN altitude"
         } else {
-            "WALK [F] / ARROWS move"
+            "WALK [F] / WASD or ARROWS move"
         },
         ACCENT,
         1,
     );
-    canvas.text(168, 56, "RMB drag look / RMB + WASD or ZQSD move", MUTED, 1);
+    canvas.text(168, 56, "Right-drag look / WASD or ZQSD move", MUTED, 1);
     canvas.text(sidebar_x + 20, 24, &state.backend.to_uppercase(), ACCENT, 2);
     canvas.text(
         sidebar_x + 20,
@@ -387,7 +387,7 @@ pub fn draw_cached(
     canvas.text(
         24,
         height.saturating_sub(25),
-        "HOME reset view  F5 save view  F9 restore  SPACE pause  S PNG  D clean  +/- EV",
+        "HOME reset  F5 save view  F9 restore  SPACE pause  CMD/CTRL+S PNG  TAB clean  +/- EV",
         MUTED,
         1,
     );
@@ -493,12 +493,12 @@ pub fn draw_cached(
             Action::TogglePause,
         ),
         ("RESTART [R]", Action::Restart),
-        ("SAVE PNG [S]", Action::Save),
+        ("SAVE PNG [CMD/CTRL+S]", Action::Save),
         (
             if state.show_filtered {
-                "VIEW RAW [D]"
+                "VIEW RAW [TAB]"
             } else {
-                "VIEW CLEAN [D]"
+                "VIEW CLEAN [TAB]"
             },
             Action::ToggleDenoise,
         ),

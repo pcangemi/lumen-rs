@@ -22,21 +22,21 @@ Use `--backend cpu` for CPU rendering, or `--backend auto` to select an accessib
 
 The viewer schedules real rendering tiles in center-first passes: 64 × 64 on CPU and 128 × 128 on Metal. The sidebar reports device, elapsed time, estimated remaining time, samples, camera sample throughput, primitive count and BVH size.
 
-The viewer supports walking through the scene. Hold the right mouse button to look around; use the arrow keys, or hold the right mouse button with WASD / ZQSD to move. It shows a dense, texture-free point cloud during movement, then starts a fresh full-quality render after 450 ms without camera movement. Moving again interrupts refinement.
+The viewer supports walking through the scene. Click the viewer to focus it, then use WASD / ZQSD or the arrow keys to move; hold the right mouse button only to look around. It shows a dense, texture-free point cloud during movement, then starts a fresh full-quality render after 450 ms without camera movement. Moving again interrupts refinement.
 
 | Control | Action |
 | --- | --- |
 | Right mouse drag | Look around |
-| Arrow keys / right mouse + WASD or ZQSD | Walk; Shift moves faster |
-| F | Toggle walking and free flight |
+| WASD / ZQSD / arrow keys | Walk without holding a mouse button; Shift moves faster |
+| F | Toggle walking and free flight, and immediately enter the preview |
 | Page Up / Page Down | Ascend / descend in free flight |
 | Home | Restore the scene's original camera |
 | F5 / F9 | Save / restore this scene's viewpoint in `renders/viewpoints/` |
 | Scene buttons | Load a preset |
 | Space / Pause | Pause or resume refinement |
-| D / Raw–Clean | Toggle accumulation and last denoised complete pass; release right mouse first |
+| Tab / Raw–Clean | Toggle accumulation and last denoised complete pass |
 | R / Restart | Restart refinement at the current viewpoint |
-| S / Save PNG | Export the displayed image to `renders/<scene>-live.png`; release right mouse first |
+| Cmd+S / Ctrl+S / Save PNG | Export the displayed image to `renders/<scene>-live.png` |
 | + / − | Adjust exposure without retracing |
 | Escape | Stop refinement and retain its image |
 | Close window | Cancel and exit |
